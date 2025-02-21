@@ -1,4 +1,4 @@
-# SFU CMPT 419 Project Template -- Replace with project title
+# SFU CMPT 419 Project Template -- This is Our Project Title (TBD)
 This repository is a template for your CMPT 419 course project.
 Replace the title with your project title, and **add a snappy acronym that people remember (mnemonic)**.
 
