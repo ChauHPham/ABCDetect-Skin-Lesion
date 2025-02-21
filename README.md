@@ -49,7 +49,7 @@ Explain briefly what files are found where
 repository
 ├── src                          ## source code of the package itself
 ├── scripts                      ## scripts, if needed
-├── docs                         ## If needed, documentation   
+├── docs                         ## Documentation of the project and the libraries used  
 ├── README.md                    ## You are here
 ├── requirements.yml             ## If you use conda
 ```
