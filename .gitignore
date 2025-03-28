@@ -1,3 +1,6 @@
+# Ignore the kaggle folder in skin_lesion_segmentation
+/src/skin_lesion_segmentation/kaggle/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
