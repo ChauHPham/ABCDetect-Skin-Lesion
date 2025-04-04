@@ -4,3 +4,5 @@ torch==2.6.0
 torchvision==0.21.0
 matplotlib==3.10.1
 ipywidgets==8.1.5  # Not required but useful for Jupyter notebooks
+opencv-python==4.11.0.86
+numpy==2.2.4
