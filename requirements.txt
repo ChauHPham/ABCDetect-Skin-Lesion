@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 absl-py==2.2.0
 aiohappyeyeballs==2.4.4
 aiohttp==3.7.4.post0
@@ -160,3 +161,13 @@ wrapt==1.17.2
 xxhash==3.5.0
 yarl==1.18.3
 zipp==3.20.2
+=======
+kagglehub==0.3.11
+pandas==2.2.3
+torch==2.6.0
+torchvision==0.21.0
+matplotlib==3.10.1
+ipywidgets==8.1.5  # Not required but useful for Jupyter notebooks
+opencv-python==4.11.0.86
+numpy==2.2.4
+>>>>>>> f986f21321a44acf79bcb985fd24655599d57379
