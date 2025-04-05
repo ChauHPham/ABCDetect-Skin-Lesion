@@ -1,0 +1,6 @@
+Worked on loading the data from kaggle
+- Figured out how to set up private key
+- Created a custom Dataset for indexing matching image, mask and label pairs from the datasets
+
+Segmentation Model
+- Using the UNet architecture
