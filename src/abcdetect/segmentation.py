@@ -280,8 +280,8 @@ def train_model(
 
 
 def train_segmentation_model(
-    ham10k_image_path: Path, ham10k_metadata_path: Path, ham10k_masks_path: Path, model_save_path: Path
-) -> None:
+    ham10k_image_path: Path, ham10k_metadata_path: Path, ham10k_masks_path: Path, output_dir: Path
+) -> Path | None:
     """Trains a segmentation model using the HAM10000 dataset.
 
     The trained model is saved to the specified path. The dataset is split into training,
@@ -291,7 +291,10 @@ def train_segmentation_model(
         ham10k_image_path: Path to the directory containing the images.
         ham10k_metadata_path: Path to the directory containing the metadata.
         ham10k_masks_path: Path to the directory containing the masks.
-        model_save_path: Path to save the trained model.
+        output_dir: Path to save the trained model output.
+
+    Returns:
+        Path to the trained model file.
     """
     print("Training segmentation model...\n")
     metadata_df = pd.read_csv(ham10k_metadata_path / "HAM10000_metadata.csv")
@@ -361,7 +364,7 @@ def train_segmentation_model(
     dice_scores = []
 
     # Early stopping parameters
-    patience = 4  # Number of epochs to wait for improvement
+    patience = 5  # Number of epochs to wait for improvement
     best_dice = 0.0
     patience_counter = 0
     best_model_state: dict | None = None
@@ -395,6 +398,7 @@ def train_segmentation_model(
     else:
         return  # No model was trained
 
+    model_save_path = output_dir / f"segmentation_model_{int(pd.Timestamp.now().timestamp())}.pt"
     torch.save(model.state_dict(), model_save_path)
 
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)

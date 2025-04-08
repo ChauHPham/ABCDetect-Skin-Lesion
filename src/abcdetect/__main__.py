@@ -22,14 +22,36 @@ if not output_dir.exists():
 # Download the HAM10K dataset
 ham10k_image_path, ham10k_metadata_path, ham10k_masks_path = download(datasets_dir)
 
-# Train the segmentation model, saving it to the output directory
-segmentation_model_path = output_dir / "segmentation_model.pt"
-if not segmentation_model_path.exists():
-    train_segmentation_model(ham10k_image_path, ham10k_metadata_path, ham10k_masks_path, segmentation_model_path)
 
-if not segmentation_model_path.exists():
-    print("Segmentation model not found. Please train the model first.")
-    sys.exit(1)
+def find_segmentation_model() -> Path | None:
+    """Finds the latest segmentation model file in the output directory.
+
+    Returns:
+        Path to the segmentation model file if found, None otherwise.
+    """
+    segmentation_model_files = list(output_dir.glob("segmentation_model_*.pt"))
+    if segmentation_model_files:
+        # Sort files by timestamp (extracted from filename) in descending order
+        latest_model = max(
+            segmentation_model_files,
+            key=lambda p: int(p.stem.split("_")[-1])
+        )
+        return latest_model
+
+    # Check for a single segmentation model file
+    single_segmentation_model = output_dir / "segmentation_model.pt"
+    if single_segmentation_model.exists():
+        return single_segmentation_model
+    return None
+
+# Train the segmentation model, saving it to the output directory
+segmentation_model_path = find_segmentation_model()
+if segmentation_model_path is None:
+    segmentation_model_path = train_segmentation_model(ham10k_image_path, ham10k_metadata_path, ham10k_masks_path, output_dir)
+
+    if segmentation_model_path is None:
+        print("No trained segmentation model found, cannot proceed.")
+        sys.exit(1)
 
 # Evaluate the segmentation model
 evaluate_segmentation_model(ham10k_image_path, ham10k_masks_path, segmentation_model_path)
