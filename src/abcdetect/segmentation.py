@@ -16,6 +16,7 @@ from tqdm import tqdm
 from .stratification import stratified_sampling
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("Using device:", DEVICE)
 
 
 class LesionDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
@@ -258,7 +259,7 @@ def train_model(
     scaler = torch.amp.GradScaler(DEVICE.type)
     loop = tqdm(loader)
 
-    for batch_idx, (data, targets) in enumerate(loop):
+    for data, targets in loop:
         data: torch.Tensor = data.to(DEVICE)
         targets: torch.Tensor = targets.to(DEVICE)
 
@@ -320,9 +321,9 @@ def train_segmentation_model(
     image_width = 256
     batch_size = 16
     learning_rate = 1e-4
-    num_epochs = 50
+    max_epochs = 40
 
-    training_transformations = A.Compose(
+    transform = A.Compose(
         [
             A.Resize(image_height, image_width),
             A.HorizontalFlip(p=0.5),
@@ -333,23 +334,15 @@ def train_segmentation_model(
         ]
     )
 
-    # validation_transformations = A.Compose(
-    #     [
-    #         A.Resize(image_height, image_width),
-    #         A.Normalize(mean=(0.0, 0.0, 0.0), std=(1.0, 1.0, 1.0), max_pixel_value=255.0),
-    #         A.ToTensorV2(),
-    #     ]
-    # )
-
     training_data = LesionDataset(
-        img_dir=ham10k_image_path, mask_dir=ham10k_masks_path, df=train_df, transform=training_transformations
+        img_dir=ham10k_image_path, mask_dir=ham10k_masks_path, df=train_df, transform=transform
     )
     train_loader = DataLoader(
         dataset=training_data, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True
     )
 
     validation_data = LesionDataset(
-        img_dir=ham10k_image_path, mask_dir=ham10k_masks_path, df=validate_df, transform=training_transformations
+        img_dir=ham10k_image_path, mask_dir=ham10k_masks_path, df=validate_df, transform=transform
     )
     validate_loader = DataLoader(
         dataset=validation_data, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=True
@@ -367,24 +360,53 @@ def train_segmentation_model(
     mean_losses = []
     dice_scores = []
 
-    for epoch in range(num_epochs):
-        train_model(train_loader, model, loss_fn, optimizer, epoch)
-        mean_loss, dice_score = validate_model(validate_loader, model, loss_fn)
-        mean_losses.append(mean_loss)
-        dice_scores.append(dice_score)
+    # Early stopping parameters
+    patience = 4  # Number of epochs to wait for improvement
+    best_dice = 0.0
+    patience_counter = 0
+    best_model_state: dict | None = None
+
+    try:
+        for epoch in range(max_epochs):
+            train_model(train_loader, model, loss_fn, optimizer, epoch)
+            mean_loss, dice_score = validate_model(validate_loader, model, loss_fn)
+            mean_losses.append(mean_loss)
+            dice_scores.append(dice_score)
+
+            # Check if this is the best model so far
+            if dice_score > best_dice:
+                best_dice = dice_score
+                patience_counter = 0
+                best_model_state = model.state_dict().copy()
+                print(f"✅ New best model saved! Dice score: {best_dice:.4f}")
+            else:
+                patience_counter += 1
+                print(f"⏳ No improvement for {patience_counter} epochs. Best dice: {best_dice:.4f}")
+
+            # Early stopping check
+            if patience_counter >= patience:
+                print(f"🛑 Early stopping at epoch {epoch + 1}/{max_epochs}")
+                break
+    except KeyboardInterrupt:
+        print("Training interrupted by user.")
+
+    if best_model_state is not None:  # Load the best model state
+        model.load_state_dict(best_model_state)
+    else:
+        return  # No model was trained
 
     torch.save(model.state_dict(), model_save_path)
 
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
 
     # Plot mean loss
-    ax1.plot(range(1, num_epochs + 1), mean_losses, "b-o")  # blue line with circle markers
+    ax1.plot(range(1, len(mean_losses) + 1), mean_losses, "b-o")  # blue line with circle markers
     ax1.set_title("Mean Loss Over Epochs")
     ax1.set_ylabel("Mean Loss")
     ax1.grid(True)
 
     # Plot dice score
-    ax2.plot(range(1, num_epochs + 1), dice_scores, "r-o")  # red line with circle markers
+    ax2.plot(range(1, len(dice_scores) + 1), dice_scores, "r-o")  # red line with circle markers
     ax2.set_title("Dice Score Over Epochs")
     ax2.set_xlabel("Epoch")
     ax2.set_ylabel("Dice Score")
@@ -419,7 +441,7 @@ def enhance_prediction_mask(mask: np.array, min_mask_size: int = 100) -> np.arra
     return denoised
 
 
-def test_segmentation_model(
+def evaluate_segmentation_model(
     ham10k_image_path: Path,
     ham10k_masks_path: Path,
     model_save_path: Path,
@@ -468,13 +490,9 @@ def test_segmentation_model(
         image = augmented["image"]
         mask = augmented["mask"]
 
-        if len(mask.shape) == 2:
-            mask = mask.unsqueeze(0)
-
         # Apply the model on the input tensor, output a binary mask
         with torch.no_grad():
-            image = image.unsqueeze(0).to(DEVICE)
-            output = test_model(image)
+            output = test_model(image.unsqueeze(0).to(DEVICE))
             output = torch.sigmoid(output)  # Sigmoid since it's binary
             predicted_mask_array = (output.squeeze().cpu().numpy() > 0.5).astype(np.uint8)
 
@@ -489,15 +507,17 @@ def test_segmentation_model(
         red_overlay[..., 0] = 1.0  # Red channel only
 
         overlay = np.where(
-            enhanced_predicted_mask_array[..., None] > 0.5, (1 - alpha) * image + alpha * red_overlay, image
+            enhanced_predicted_mask_array[..., None] > 0.5,
+            (1 - alpha) * image_array + alpha * red_overlay,
+            image_array,
         )
 
         # Plot: image, raw pred, enhanced mask, ground truth, overlay
         titles = ["Image", "Predicted Mask", "Enhanced Mask", "Correct Mask", "Overlay"]
-        visuals = [image, predicted_mask_array, enhanced_predicted_mask_array, mask, overlay]
+        visuals = [image_array, predicted_mask_array, enhanced_predicted_mask_array, mask, overlay]
 
         for j in range(5):
-            axes[i, j].imshow(visuals[j], cmap="gray" if j in [1, 2, 3] else None)
+            axes[i, j].imshow(visuals[j], cmap="gray" if j in {1, 2, 3} else None)
             axes[i, j].set_title(titles[j])
             axes[i, j].axis("off")
 
