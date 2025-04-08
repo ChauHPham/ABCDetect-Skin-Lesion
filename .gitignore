@@ -1,6 +1,9 @@
 # Ignore the kaggle folder in skin_lesion_segmentation
+/dataset
 /src/datasets
-/src/segmentation_model.pth
+
+#Models
+*.pth
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

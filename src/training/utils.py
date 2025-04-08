@@ -1,6 +1,4 @@
 import kagglehub
-from kagglehub import KaggleDatasetAdapter
-
 import os
 import shutil
 
@@ -90,3 +88,17 @@ def split_dataset(directory_path, validation_percentage=0.1):
 
     return test_dir, val_dir
 
+def move_all_files(src_folder, dst_folder, exclude_subdirectories=False):
+    if not os.path.exists(dst_folder):
+            os.makedirs(dst_folder)
+
+    for filename in os.listdir(src_folder):
+        src_path = os.path.join(src_folder, filename)
+        dst_path = os.path.join(dst_folder, filename)
+
+        if os.path.isfile(src_path):  # Skip subdirectories
+            shutil.move(src_path, dst_path)
+            print(f"Moved {filename} to {dst_path}")
+            
+        elif not exclude_subdirectories:
+            move_all_files(src_path, dst_path)
