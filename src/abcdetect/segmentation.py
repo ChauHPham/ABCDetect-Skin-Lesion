@@ -67,7 +67,7 @@ class LesionDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
 
 
 def show_batch_samples(
-    loader: DataLoader[tuple[torch.Tensor, torch.Tensor]], alpha: float = 0.3, num_samples: int = 3
+    loader: DataLoader[tuple[torch.Tensor, torch.Tensor]], *, alpha: float = 0.3, num_samples: int = 3
 ) -> None:
     """Visualizes a batch of images and their corresponding masks.
 
@@ -191,6 +191,49 @@ class UNET(nn.Module):
             x = self.upsampling_fn[idx + 1](concat_skip)
 
         return self.final_conv_fn(x)
+
+
+def get_training_transform(image_height: int = 192, image_width: int = 256) -> A.Compose:
+    """Defines the training transformations for the dataset.
+
+    Args:
+        image_height: The height of the image after resizing.
+        image_width: The width of the image after resizing.
+
+    Returns:
+        A Compose object containing the transformations.
+    """
+    return A.Compose(
+        [
+            A.Resize(image_height, image_width),
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            A.Rotate(limit=30, p=0.5),
+            A.Normalize(mean=(0.0, 0.0, 0.0), std=(1.0, 1.0, 1.0), max_pixel_value=255.0),
+            A.ToTensorV2(),
+        ]
+    )
+
+
+def get_evaluation_transform(image_height: int = 192, image_width: int = 256) -> A.Compose:
+    """Defines the evaluation transformations for the dataset.
+
+    For best performance, the evaluation transform should use the same resizing as the training transform.
+
+    Args:
+        image_height: The height of the image after resizing.
+        image_width: The width of the image after resizing.
+
+    Returns:
+        A Compose object containing the transformations.
+    """
+    return A.Compose(
+        [
+            A.Resize(image_height, image_width),
+            A.Normalize(mean=(0.0, 0.0, 0.0), std=(1.0, 1.0, 1.0), max_pixel_value=255.0),
+            A.ToTensorV2(),
+        ]
+    )
 
 
 def validate_model(
@@ -320,22 +363,11 @@ def train_segmentation_model(
     # visualize_dx_column_as_histogram(validate_df)
     # visualize_dx_column_as_histogram(test_df)
 
-    image_height = 192
-    image_width = 256
     batch_size = 16
     learning_rate = 1e-4
     max_epochs = 40
 
-    transform = A.Compose(
-        [
-            A.Resize(image_height, image_width),
-            A.HorizontalFlip(p=0.5),
-            A.VerticalFlip(p=0.5),
-            A.Rotate(limit=30, p=0.5),
-            A.Normalize(mean=(0.0, 0.0, 0.0), std=(1.0, 1.0, 1.0), max_pixel_value=255.0),
-            A.ToTensorV2(),
-        ]
-    )
+    transform = get_training_transform()
 
     training_data = LesionDataset(
         img_dir=ham10k_image_path, mask_dir=ham10k_masks_path, df=train_df, transform=transform
@@ -466,8 +498,6 @@ def evaluate_segmentation_model(
 
     fig_size = (12, num_samples * 4)
     fig, axes = plt.subplots(num_samples, 5, figsize=fig_size)
-    image_height = 192
-    image_width = 256
 
     test_model = UNET(in_channels=3, out_channels=1).to(DEVICE)
     test_model.load_state_dict(torch.load(model_save_path))
@@ -483,13 +513,7 @@ def evaluate_segmentation_model(
         mask_array[mask_array > 0] = 1.0
 
         # Apply transformations to the image and the mask
-        transform = A.Compose(
-            [
-                A.Resize(image_height, image_width),
-                A.Normalize(mean=(0.0, 0.0, 0.0), std=(1.0, 1.0, 1.0), max_pixel_value=255.0),
-                A.ToTensorV2(),
-            ]
-        )
+        transform = get_evaluation_transform()
         augmented = transform(image=image_array, mask=mask_array)
         image = augmented["image"]
         mask = augmented["mask"]
@@ -527,3 +551,72 @@ def evaluate_segmentation_model(
 
     plt.tight_layout()
     plt.show()
+
+
+def segment_image(image_path: Path, model_save_path: Path, output_dir: Path, *, alpha: float = 0.3) -> Path:
+    """Segments a single image using the provided model and saves the mask to the output directory.
+
+    Args:
+        image_path: Path to the input image.
+        model_save_path: Path to the trained model.
+        output_dir: Directory to save the generated mask.
+        alpha: The transparency level for the overlay (0.0 to 1.0).
+
+    Returns:
+        Path to the saved mask file.
+    """
+    model = UNET(in_channels=3, out_channels=1).to(DEVICE)
+    model.load_state_dict(torch.load(model_save_path))
+    model.eval()
+
+    image_array = np.array(Image.open(image_path).convert("RGB"))
+
+    # Apply transformations to the image
+    transform = get_evaluation_transform()
+    augmented = transform(image=image_array)
+    image = augmented["image"]
+
+    # Generate the mask using the model
+    with torch.no_grad():
+        output = model(image.unsqueeze(0).to(DEVICE))
+        output = torch.sigmoid(output)  # Apply sigmoid for binary segmentation
+        predicted_mask_array = (output.squeeze().cpu().numpy() > 0.5).astype(np.uint8)
+
+    # Enhance the predicted mask
+    enhanced_mask = enhance_prediction_mask(predicted_mask_array)
+
+    # Save the mask to the output directory
+    mask_output_path = output_dir / f"{image_path.stem}_segmentation.png"
+    Image.fromarray((enhanced_mask * 255).astype(np.uint8)).save(mask_output_path)
+
+    # Create an overlay for visualization
+    image_array = image.permute(1, 2, 0).cpu().numpy()
+    red_overlay = np.zeros_like(image_array)
+    red_overlay[..., 0] = 1.0  # Red channel only
+
+    overlay = np.where(
+        enhanced_mask[..., None] > 0.5,
+        (1 - alpha) * image_array + alpha * red_overlay,
+        image_array,
+    )
+
+    # Display the results
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+
+    axes[0].imshow(image_array)
+    axes[0].set_title("Original Image")
+    axes[0].axis("off")
+
+    axes[1].imshow(enhanced_mask, cmap="gray")
+    axes[1].set_title("Generated Mask")
+    axes[1].axis("off")
+
+    axes[2].imshow(overlay)
+    axes[2].set_title("Overlay")
+    axes[2].axis("off")
+
+    plt.tight_layout()
+    plt.show()
+
+    print(f"Mask saved to {mask_output_path}.")
+    return mask_output_path

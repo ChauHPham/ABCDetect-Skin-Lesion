@@ -131,7 +131,7 @@ def download(datasets_dir: Path) -> tuple[Path, Path, Path]:
 
     # Download the segmentation masks dataset if it doesn't exist
     if not ham10k_masks_path.exists():
-        print("Downloading HAM10000 segementation masks dataset...")
+        print("Downloading HAM10000 segmentation masks dataset...")
         ham10k_masks_dataset_location = download_kaggle_dataset(ham10k_masks_kaggle_identifier, datasets_dir)
 
         merge_dirs(
