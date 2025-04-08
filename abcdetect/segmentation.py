@@ -428,10 +428,12 @@ def train_segmentation_model(
     if best_model_state is not None:  # Load the best model state
         model.load_state_dict(best_model_state)
     else:
-        return  # No model was trained
+        return None  # No model was trained
 
     model_save_path = output_dir / f"segmentation_model_{int(pd.Timestamp.now().timestamp())}.pt"
     torch.save(model.state_dict(), model_save_path)
+    print("Training completed.")
+    print(f"Model saved to {model_save_path}.")
 
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
 
@@ -451,6 +453,7 @@ def train_segmentation_model(
     # Adjust layout
     plt.tight_layout()
     plt.show()
+    return model_save_path
 
 
 def enhance_prediction_mask(mask: np.array, min_mask_size: int = 100) -> np.array:
