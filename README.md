@@ -1,8 +1,7 @@
 # SFU CMPT 419 Project -- ABCDetect
-This repository is a template for your CMPT 419 course project.
-Replace the title with your project title, and **add a snappy acronym that people remember (mnemonic)**.
+**ABCDetect**: Automated Boundary Classification and Detection for Skin Lesions
 
-Add a 1-2 line summary of your project here.
+ABCDetect is a tool for skin lesion segmentation and classification using deep learning. It helps identify potential melanoma boundaries from dermoscopic images.
 
 ## Important Links
 
@@ -10,13 +9,8 @@ Add a 1-2 line summary of your project here.
 |-----------|---------------|-------------------------|
 
 
-- Timesheet: Link your timesheet (pinned in your project's Slack channel) where you track per student the time and tasks completed/participated for this project/
-- Slack channel: Link your private Slack project channel.
-- Project report: Link your Overleaf project report document.
-
-
 ## Video/demo/GIF
-Record a short video (1:40 - 2 minutes maximum) or gif or a simple screen recording or even using PowerPoint with audio or with text, showcasing your work.
+[Add your project demo video or GIF here - 1:40 to 2 minutes maximum]
 
 
 ## Table of Contents
@@ -32,57 +26,128 @@ Record a short video (1:40 - 2 minutes maximum) or gif or a simple screen record
 <a name="demo"></a>
 ## 1. Example demo
 
-A minimal example to showcase your work
+Run a complete demonstration of the project with dataset download, model training, and evaluation:
 
-```python
-from amazing import amazingexample
-imgs = amazingexample.demo()
-for img in imgs:
-    view(img)
+```bash
+python -m abcdetect demo
+```
+
+To segment a single skin lesion image using a pre-trained model:
+
+```bash
+python -m abcdetect segment --image /path/to/your/image.jpg
 ```
 
 ### What to find where
 
-Explain briefly what files are found where
-
 ```bash
 repository
-├── src                          ## source code of the package itself
-├── scripts                      ## scripts, if needed
-├── docs                         ## Documentation of the project and the libraries used  
+├── abcdetect/                   ## Source code package with segmentation and classification modules
+│   ├── __main__.py              ## Entry point with CLI implementation
+│   ├── download_dataset.py      ## Dataset download functionality
+│   ├── segmentation.py          ## Segmentation model training and inference
+│   └── ...                      ## Additional modules
+├── docs/                        ## Documentation of the project and the libraries used  
 ├── README.md                    ## You are here
-├── requirements.yml             ## If you use conda
+├── requirements.txt             ## Dependencies of the project
 ```
 
 <a name="installation"></a>
 
 ## 2. Installation
 
-Provide sufficient instructions to reproduce and install your project. 
-Provide _exact_ versions, test on CSIL or reference workstations.
+ABCDetect requires Python 3.12 or later and PyTorch. Follow these steps to set up the environment:
 
 ```bash
-git clone $THISREPO
-cd $THISREPO
-conda env create -f requirements.yml
-conda activate amazing
+# Clone the repository
+git clone https://github.com/sfu-cmpt419/2025_1_project_06.git
+cd 2025_1_project_06
+
+# Create and activate a virtual environment
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
 ```
+
+Install PyTorch with the appropriate version for your system:
+
+```bash
+# For CUDA support (if you have a compatible NVIDIA GPU)
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
+
+# For CPU only
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+```
+
+You can also visit the [PyTorch installation page](https://pytorch.org/get-started/locally/#start-locally) to get the exact command for your system configuration.
 
 <a name="repro"></a>
 ## 3. Reproduction
-Demonstrate how your work can be reproduced, e.g. the results in your report.
+
+To reproduce the results in our report, follow these steps:
+
 ```bash
-mkdir tmp && cd tmp
-wget https://yourstorageisourbusiness.com/dataset.zip
-unzip dataset.zip
-conda activate amazing
-python evaluate.py --epochs=10 --data=/in/put/dir
+# 1. Download the HAM10K dataset
+python -m abcdetect download
+
+# 2. Train the segmentation model (adjust batch size based on your GPU memory)
+python -m abcdetect train --batch-size 32 --device cuda
+
+# 3. Evaluate the model on the test set
+python -m abcdetect demo
+
+# 4. To segment a specific image using the trained model
+python -m abcdetect segment --image path/to/test_image.jpg
 ```
-Data can be found at ...
-Output will be saved in ...
+
+The downloaded dataset will be stored in the `datasets` directory by default.
+Model checkpoints and evaluation results will be saved in the `output` directory.
+You can change these locations using the `--datasets-dir` and `--output-dir` options.
 
 <a name="guide"></a>
 ## 4. Guidance
+
+### CLI Usage Guide
+
+```
+python -m abcdetect [mode] [options]
+```
+
+Available modes:
+- `download`: Download the HAM10K dataset only
+- `train`: Train the segmentation model
+- `segment`: Segment a specific image using a trained model
+- `demo`: Run the full pipeline (download, train, evaluate)
+
+Common options:
+- `--datasets-dir`, `-d`: Directory to store datasets (default: ./datasets)
+- `--output-dir`, `-o`: Directory for output files (default: ./output)
+- `--device`, `--dev`: Device to use (auto, cuda, cpu)
+- `--show-graph`, `-v`: Show visualizations during execution
+
+Mode-specific options:
+- Download mode: `--force`, `-f`: Force re-download even if data exists
+- Train mode: `--batch-size`, `-k`: Batch size for training (default: 32)
+- Train mode: `--num-workers`, `-n`: Number of data loader workers
+- Segment mode: `--image`, `-i`: Path to the image to segment
+- Segment mode: `--model`, `-m`: Path to the model file (optional)
+
+Example commands:
+```bash
+# Download dataset
+python -m abcdetect download --force
+
+# Train with specific settings
+python -m abcdetect train --batch-size 64 --num-workers 4 --device cuda
+
+# Segment an image
+python -m abcdetect segment --image test_images/lesion.jpg
+
+# Run full demo with custom directories
+python -m abcdetect demo --datasets-dir ./my_datasets --output-dir ./results
+```
 
 - Use [git](https://git-scm.com/book/en/v2)
     - Do NOT use history re-editing (rebase)
