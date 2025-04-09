@@ -6,8 +6,7 @@ import kagglehub
 
 
 def download_kaggle_dataset(identifier: str, output_directory: Path, force_download: bool = False) -> Path:
-    """
-    Downloads a dataset from Kaggle and stores it in the specified directory.
+    """Downloads a dataset from Kaggle and stores it in the specified directory.
 
     This function uses the `kagglehub` library to download the dataset. The dataset is identified by
     its Kaggle identifier (e.g., "tschandl/ham10000-lesion-segmentations").
@@ -98,8 +97,7 @@ def move_files(src_dir: Path, dst_dir: Path, exclude_subdirectories: bool = Fals
 
 
 def download(datasets_dir: Path, force: bool = False) -> tuple[Path, Path, Path]:
-    """
-    Downloads the HAM10000 dataset and its segmentation masks from Kaggle.
+    """Downloads the HAM10000 dataset and its segmentation masks from Kaggle.
 
     Args:
         datasets_dir: The base directory where the datasets will be downloaded.
