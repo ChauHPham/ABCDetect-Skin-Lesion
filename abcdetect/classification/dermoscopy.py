@@ -1,4 +1,4 @@
-# abcdetect/classification/structures.py
+# abcdetect/classification/dermoscopy.py
 import cv2
 import numpy as np
 
