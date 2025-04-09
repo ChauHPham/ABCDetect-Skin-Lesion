@@ -5,33 +5,47 @@ import numpy as np
 
 def detect_dermoscopic_structures(image_path):
     """
-    Detects 4 basic dermoscopic structures from a lesion image.
-    Currently implemented: dots/globules using blob detection.
+    Detects basic dermoscopic structures from a lesion image.
+    Currently implemented: dots and globules using blob detection and thresholded by area.
     """
     image = cv2.imread(image_path)
     if image is None:
         raise FileNotFoundError(f"Image not found: {image_path}")
 
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    
-    # Blob detection (for dots/globules)
-    params = cv2.SimpleBlobDetector_Params()
-    params.filterByArea = True
-    params.minArea = 10
-    params.maxArea = 200
-    params.filterByCircularity = True
-    params.minCircularity = 0.7
 
-    detector = cv2.SimpleBlobDetector_create(params)
-    keypoints = detector.detect(gray)
+    # Apply Gaussian Blur to reduce noise
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
 
-    has_dots_globules = len(keypoints) > 0
+    # Threshold to isolate darker regions (potential dots/globules)
+    _, thresh = cv2.threshold(blurred, 80, 255, cv2.THRESH_BINARY_INV)
+
+    # Find contours in the thresholded image
+    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    dots = 0
+    globules = 0
+
+    for cnt in contours:
+        area = cv2.contourArea(cnt)
+        if 10 <= area < 50:
+            dots += 1
+        elif 50 <= area < 200:
+            globules += 1
+
+    has_dots = dots > 0
+    has_globules = globules > 0
+
+    # Each feature contributes 0.5 if present
+    d_score = 0.5 * int(has_dots) + 0.5 * int(has_globules)
 
     return {
-        "pigment_network": None,  # Not yet implemented
-        "dots_globules": has_dots_globules,
-        "streaks": None,          # Not yet implemented
-        "structureless_areas": None  # Not yet implemented
+        "dots": has_dots,
+        "globules": has_globules,
+        "D_score": d_score,
+        "pigment_network": None,
+        "streaks": None,
+        "structureless_areas": None
     }
 
 
