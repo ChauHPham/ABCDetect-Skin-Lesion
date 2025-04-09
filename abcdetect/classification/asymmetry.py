@@ -7,8 +7,7 @@ from skimage import feature
 
 
 def calculate_asymmetry(image: np.ndarray, mask: np.ndarray, *, show_graph: bool = False) -> float:
-    """
-    Calculate asymmetry score for the lesion according to ABCD rule.
+    """Calculate asymmetry score for the lesion according to ABCD rule.
 
     Args:
         image: RGB image of the lesion.
@@ -64,8 +63,7 @@ def is_axis_asymmetric(
     color_bins: int = 16,
     lbp_bins: int = 10,
 ) -> bool:
-    """
-    Determine if the lesion shows asymmetry along a specific axis.
+    """Determine if the lesion shows asymmetry along a specific axis.
 
     Asymmetry is calculated based on shape, colour, and texture features.
 
@@ -122,8 +120,7 @@ def is_axis_asymmetric(
 def split_mask_by_axis(
     mask: np.ndarray, centroid: tuple[int, int], axis_vector: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Split a mask into two halves divided by an axis through the centroid.
+    """Split a mask into two halves divided by an axis through the centroid.
 
     Args:
         mask: Binary mask image.
@@ -161,8 +158,8 @@ def split_mask_by_axis(
 
 
 def reflect_across_axis(half: np.ndarray, centroid: tuple[int, int], axis_vector: np.ndarray) -> np.ndarray:
-    """
-    Reflect a binary mask across an axis through the centroid.
+    """Reflect a binary mask across an axis through the centroid.
+
     Uses direct point-by-point mapping to ensure exact correspondence.
 
     Args:
@@ -210,8 +207,7 @@ def calculate_shape_asymmetry(
     *,
     show_graph: bool = False,
 ) -> float:
-    """
-    Calculate the shape asymmetry between two halves of a lesion.
+    """Calculate the shape asymmetry between two halves of a lesion.
 
     Args:
         half1_mask: Binary mask of the first half.
@@ -283,8 +279,7 @@ def calculate_colour_asymmetry(
     show_graph: bool = False,
     color_bins: int = 16,
 ) -> float:
-    """
-    Calculate the colour asymmetry between two halves of a lesion.
+    """Calculate the colour asymmetry between two halves of a lesion.
 
     Args:
         image: RGB image of the lesion
@@ -336,8 +331,7 @@ def calculate_colour_asymmetry(
 def extract_colour_features(
     lab_image: np.ndarray, mask: np.ndarray, *, color_bins: int = 16
 ) -> dict[str, Any] | None:
-    """
-    Extract colour features from a masked region of an image.
+    """Extract colour features from a masked region of an image.
 
     Args:
         lab_image: Image in LAB colour space.
@@ -375,8 +369,7 @@ def extract_colour_features(
 
 
 def calculate_colour_histogram_distance(hist1: list[np.ndarray], hist2: list[np.ndarray]) -> float:
-    """
-    Calculate the distance between two colour histograms using Chi-Square distance.
+    """Calculate the distance between two colour histograms using Chi-Square distance.
 
     Args:
         hist1: First histogram (list of channel histograms).
@@ -398,8 +391,7 @@ def calculate_colour_histogram_distance(hist1: list[np.ndarray], hist2: list[np.
 
 
 def calculate_mean_colour_difference(mean1: list[float], mean2: list[float]) -> float:
-    """
-    Calculate the difference between mean colours using CIEDE2000 colour difference.
+    """Calculate the difference between mean colours using CIEDE2000 colour difference.
 
     Args:
         mean1: First mean colour [L, a, b].
@@ -430,8 +422,7 @@ def calculate_texture_asymmetry(
     show_graph: bool = False,
     lbp_bins: int = 10,
 ) -> float:
-    """
-    Calculate the texture/structure asymmetry between two halves of a lesion.
+    """Calculate the texture/structure asymmetry between two halves of a lesion.
 
     Args:
         image: RGB image of the lesion.
@@ -489,8 +480,7 @@ def calculate_texture_asymmetry(
 def extract_texture_features(
     gray_img: np.ndarray, mask: np.ndarray, *, lbp_bins: int = 10
 ) -> dict[str, np.ndarray] | None:
-    """
-    Extract texture features from a masked region of a grayscale image.
+    """Extract texture features from a masked region of a grayscale image.
 
     Args:
         gray_img: Grayscale image.
