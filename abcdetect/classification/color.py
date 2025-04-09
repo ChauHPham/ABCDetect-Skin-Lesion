@@ -1,109 +1,167 @@
+"""
+color.py
+
+Color classification module for ABCDetect.
+This module defines a function to compute the color score according to the ABCD rule:
+Each of the following six colors is considered:
+  - white
+  - red
+  - light brown
+  - dark brown
+  - blue-gray
+  - black
+
+Each color that is present (above a minimum fraction threshold)
+adds 1 point to the raw score; then the raw score is multiplied by 0.5 for the TDS contribution.
+The raw color score is expected to be in the range 1 to 6.
+Note: For white, the clinical definition requires the lesion area to be lighter than the surrounding skin.
+Without a normal-skin reference here, we use a high-brightness threshold.
+"""
+
 from typing import Any
 import cv2
-import matplotlib.pyplot as plt
 import numpy as np
+import matplotlib.pyplot as plt
 
-def calculate_color_classification(
-    image: np.ndarray,
-    mask: np.ndarray,
-    *,
-    show_graph: bool = False,
-    bins: int = 8,
-) -> float:
+
+def calculate_color_score(image: np.ndarray, mask: np.ndarray, *, show_graph: bool = False) -> float:
     """
-    Calculate the color classification score for the lesion based on its color heterogeneity.
-    
-    The function extracts the pixels within the lesion (as defined by the binary mask),
-    converts them to the LAB color space, computes a 3D histogram over the three channels,
-    and then computes the entropy of the color distribution. The entropy is normalized by the
-    maximum possible entropy given the number of bins. This normalized entropy (0.0 to 1.0) is
-    returned as the TDS contribution score for the color category.
-    
+    Calculate color score for the lesion according to ABCD rule.
+
+    The lesion is expected to contain one or more of these colors:
+      - white
+      - red
+      - light brown
+      - dark brown
+      - blue-gray
+      - black
+    Each distinct color (if present above a small threshold area) counts as 1 point.
+    The TDS contribution is computed as: color_score = (number of present colors) * 0.5
+
     Args:
-        image: An RGB image of the lesion (numpy array).
-        mask: A binary numpy array mask indicating the lesion area.
-        show_graph: If True, display a 2D visualization of the color distribution.
-        bins: Number of bins per channel for the 3D histogram (default is 8).
-    
+        image: RGB image of the lesion as a NumPy array.
+        mask: Binary mask (same size as image) delineating the lesion.
+        show_graph: If True, display visualization plots for detected color regions.
+
     Returns:
-        A normalized entropy score (0.0 to 1.0) representing the color variegation.
-        Higher values indicate greater color diversity.
+        TDS contribution score for color classification.
     """
-    # Ensure that there are valid lesion pixels
-    if np.sum(mask) == 0:
+    # Ensure that there is lesion area; if not, return 0.0.
+    lesion_area = np.sum(mask)
+    if lesion_area == 0:
         return 0.0
 
-    # Convert the image to LAB color space for a more perceptually uniform color representation.
-    lab_image = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
+    # Convert the input RGB image to HSV (makes it easier to set threshold ranges).
+    hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV)
 
-    # Extract only the pixels that are part of the lesion.
-    lesion_pixels = lab_image[mask > 0]  # shape (num_pixels, 3)
+    # Define HSV threshold ranges for each color.
+    # Note: OpenCV’s HSV uses H:0-180, S:0-255, V:0-255.
+    thresholds = {
+        "white": {"lower": np.array([0, 0, 200]), "upper": np.array([180, 40, 255])},
+        # For red: due to hue wraparound, we use two ranges and later combine them.
+        "red1": {"lower": np.array([0, 100, 50]), "upper": np.array([10, 255, 255])},
+        "red2": {"lower": np.array([170, 100, 50]), "upper": np.array([180, 255, 255])},
+        "light brown": {"lower": np.array([10, 50, 150]), "upper": np.array([30, 200, 230])},
+        "dark brown": {"lower": np.array([10, 100, 50]), "upper": np.array([30, 255, 150])},
+        "blue-gray": {"lower": np.array([100, 20, 50]), "upper": np.array([130, 100, 200])},
+        "black": {"lower": np.array([0, 0, 0]), "upper": np.array([180, 255, 50])},
+    }
 
-    # Compute a 3D histogram over the LAB channels.
-    # Here we use an equal number of bins in each channel.
-    hist, edges = np.histogramdd(lesion_pixels, bins=(bins, bins, bins), range=[(0, 255), (0, 255), (0, 255)])
-    
-    # Normalize the histogram to turn counts into probabilities.
-    total_pixels = np.sum(hist)
-    if total_pixels == 0:
-        return 0.0
-    hist_prob = hist / total_pixels
+    # Minimum fraction of the lesion area for a color to be considered "present"
+    presence_threshold = 0.01  # e.g. 1% of lesion pixels
 
-    # Compute the entropy of the color distribution.
-    # Only include bins with non-zero probability to avoid log(0).
-    entropy = -np.sum([p * np.log2(p) for p in hist_prob.flatten() if p > 0])
-    
-    # Determine maximum possible entropy: if the distribution were perfectly uniform
-    max_entropy = np.log2(bins ** 3)  # since we have bins^3 total bins
-    normalized_entropy = entropy / max_entropy if max_entropy > 0 else 0.0
+    detected_colors = {}
 
+    # Process red separately (combine two ranges)
+    red_mask1 = cv2.inRange(hsv, thresholds["red1"]["lower"], thresholds["red1"]["upper"])
+    red_mask2 = cv2.inRange(hsv, thresholds["red2"]["lower"], thresholds["red2"]["upper"])
+    red_mask = cv2.bitwise_or(red_mask1, red_mask2)
+    # Constrain to the lesion area:
+    red_mask = cv2.bitwise_and(red_mask, red_mask, mask=mask.astype(np.uint8))
+    red_fraction = np.sum(red_mask > 0) / lesion_area
+    if red_fraction > presence_threshold:
+        detected_colors["red"] = red_fraction
+
+    # Process the remaining colors
+    for color in ["white", "light brown", "dark brown", "blue-gray", "black"]:
+        color_mask = cv2.inRange(hsv, thresholds[color]["lower"], thresholds[color]["upper"])
+        # Apply lesion mask to focus on the lesion area
+        color_mask = cv2.bitwise_and(color_mask, color_mask, mask=mask.astype(np.uint8))
+        fraction = np.sum(color_mask > 0) / lesion_area
+        if fraction > presence_threshold:
+            detected_colors[color] = fraction
+
+    # Count the total number of different colors detected.
+    color_count = len(detected_colors)
+    # If no color is detected (which is unlikely), assume at least one exists.
+    if color_count == 0:
+        color_count = 1
+
+    # Apply the factor for TDS contribution.
+    factor = 0.5
+    tds_contribution = color_count * factor
+
+    # Optional visualization
     if show_graph:
-        visualize_color_distribution(lesion_pixels, hist_prob, edges, entropy, normalized_entropy)
+        # Define display colors (in RGB) for each key color.
+        display_colors = {
+            "white": (255, 255, 255),
+            "red": (255, 0, 0),
+            "light brown": (210, 180, 140),  # a tan-like color
+            "dark brown": (101, 67, 33),
+            "blue-gray": (102, 153, 204),
+            "black": (0, 0, 0),
+        }
+        # Create a figure with one panel per detected color plus one for the original lesion.
+        num_plots = len(detected_colors) + 1
+        fig, ax = plt.subplots(1, num_plots, figsize=(5 * num_plots, 5))
+        # Ensure ax is always an array
+        if num_plots == 1:
+            ax = [ax]
 
-    return normalized_entropy
+        i = 0
+        for col, frac in detected_colors.items():
+            if col == "red":
+                color_mask_disp = red_mask
+            else:
+                color_mask_disp = cv2.inRange(hsv, thresholds[col]["lower"], thresholds[col]["upper"])
+                color_mask_disp = cv2.bitwise_and(color_mask_disp, color_mask_disp, mask=mask.astype(np.uint8))
+            # Create an overlay image showing detected color regions
+            overlay = image.copy()
+            overlay[color_mask_disp > 0] = display_colors[col]
+            ax[i].imshow(overlay)
+            ax[i].set_title(f"{col}\nFraction: {frac:.2f}")
+            ax[i].axis("off")
+            i += 1
 
-def visualize_color_distribution(
-    lesion_pixels: np.ndarray,
-    hist_prob: np.ndarray,
-    edges: list,
-    entropy: float,
-    normalized_entropy: float,
-) -> None:
-    """
-    Visualize the color distribution (projected into two dimensions) of the lesion.
-    
-    In this example we show a 2D histogram of the L vs. a channels extracted from the LAB pixels,
-    along with the entropy metrics in the title.
-    
-    Args:
-        lesion_pixels: Array of LAB pixels from the lesion.
-        hist_prob: The normalized 3D histogram probabilities.
-        edges: Bin edges from the histogramdd function.
-        entropy: Computed raw entropy.
-        normalized_entropy: Entropy normalized by the maximum possible entropy.
-    """
-    # We will visualize a projection: for instance, the L (lightness) and a channels.
-    L_values = lesion_pixels[:, 0]
-    a_values = lesion_pixels[:, 1]
-    plt.figure(figsize=(8, 6))
-    plt.hist2d(L_values, a_values, bins=32, cmap='inferno')
-    plt.colorbar(label="Count")
-    plt.title(
-        f"Lesion Color Distribution (L vs. a)\n"
-        f"Entropy: {entropy:.3f}, Normalized: {normalized_entropy:.3f}"
-    )
-    plt.xlabel("L channel")
-    plt.ylabel("a channel")
-    plt.show()
+        # Show original lesion overlay (with lesion mask)
+        lesion_overlay = image.copy()
+        # Create a simple mask overlay in grayscale (scaled to 255)
+        lesion_mask_rgb = np.stack([mask * 255, mask * 255, mask * 255], axis=-1)
+        lesion_overlay = cv2.addWeighted(lesion_overlay, 0.7, lesion_mask_rgb, 0.3, 0)
+        ax[i].imshow(lesion_overlay)
+        ax[i].set_title("Original Lesion")
+        ax[i].axis("off")
+        plt.tight_layout()
+        plt.show()
 
-# Example test code; can be removed in production.
-if __name__ == "__main__":
-    # Create a dummy RGB image and a circular lesion mask for demonstration.
-    image = np.random.randint(0, 256, (256, 256, 3), dtype=np.uint8)
+    return tds_contribution
+
+
+# If run as a script, execute a simple demo (this demo expects a test image and mask)
+if __name__ == '__main__':
+    # For demonstration, create dummy data.
+    # Replace these with actual image and mask paths (or load your sample lesion image and mask)
+    import sys
+
+    # Create a dummy RGB image (e.g. 256x256 with random colors) and a circular mask.
+    img = np.random.randint(0, 255, (256, 256, 3), dtype=np.uint8)
     mask = np.zeros((256, 256), dtype=np.uint8)
-    # Draw a filled circle to simulate a lesion region.
-    cv2.circle(mask, (128, 128), 60, 1, -1)
+    cv2.circle(mask, (128, 128), 80, 1, -1)  # binary mask with a circle
 
-    # Calculate the color classification (variegation) score.
-    score = calculate_color_classification(image, mask, show_graph=True)
-    print("Color classification score:", score)
+    # Calculate color score.
+    score = calculate_color_score(img, mask, show_graph=True)
+    print(f"Calculated TDS color contribution score: {score:.2f}")
+
+    # Exit gracefully.
+    sys.exit(0)
