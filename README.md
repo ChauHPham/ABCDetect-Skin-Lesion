@@ -20,7 +20,9 @@ ABCDetect is a tool for skin lesion segmentation and classification using deep l
 
 3. [Reproducing this project](#repro)
 
-4. [Guidance](#guide)
+4. [Using Pre-trained Model](#pretrained)
+
+5. [Guidance](#guide)
 
 
 <a name="demo"></a>
@@ -106,8 +108,25 @@ The downloaded dataset will be stored in the `datasets` directory by default.
 Model checkpoints and evaluation results will be saved in the `output` directory.
 You can change these locations using the `--datasets-dir` and `--output-dir` options.
 
+<a name="pretrained"></a>
+## 4. Using a Pre-trained Model
+
+If you prefer to skip the training process, you can use our pre-trained model available on Hugging Face:
+
+1. Visit [our Hugging Face repository](https://huggingface.co/ColwynAIWiz/LesionSegmentation/tree/main)
+2. Download the latest `.pt` model file (the one with the most recent timestamp)
+3. Use the model for segmentation:
+
+```bash
+# Specify the model path directly
+python -m abcdetect segment --model path/to/downloaded/model.pt --image path/to/your/image.jpg
+
+# OR place the model in your output directory and it will be used automatically
+python -m abcdetect segment --image path/to/your/image.jpg
+```
+
 <a name="guide"></a>
-## 4. Guidance
+## 5. Guidance
 
 ### CLI Usage Guide
 
@@ -145,17 +164,9 @@ python -m abcdetect train --batch-size 64 --num-workers 4 --device cuda
 # Segment an image
 python -m abcdetect segment --image test_images/lesion.jpg
 
+# Segment an image using a downloaded pre-trained model
+python -m abcdetect segment --image test_images/lesion.jpg --model pretrained_models/segmentation_model.pt
+
 # Run full demo with custom directories
 python -m abcdetect demo --datasets-dir ./my_datasets --output-dir ./results
 ```
-
-- Use [git](https://git-scm.com/book/en/v2)
-    - Do NOT use history re-editing (rebase)
-    - Commit messages should be informative:
-        - No: 'this should fix it', 'bump' commit messages
-        - Yes: 'Resolve invalid API call in updating X'
-    - Do NOT include IDE folders (.idea), or hidden files. Update your .gitignore where needed.
-    - Do NOT use the repository to upload data
-- Use [VSCode](https://code.visualstudio.com/) or a similarly powerful IDE
-- Use [Copilot for free](https://dev.to/twizelissa/how-to-enable-github-copilot-for-free-as-student-4kal)
-- Sign up for [GitHub Education](https://education.github.com/) 

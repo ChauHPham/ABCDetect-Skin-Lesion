@@ -215,7 +215,7 @@ def main() -> None:
         help="Path to the model file (uses latest model in output directory if not specified)",
     )
 
-    # Full demo mode (default)
+    # Full demo mode
     demo_parser = subparsers.add_parser("demo", help="Run full demonstration (download, train, evaluate)")
     demo_parser.add_argument("--force-download", "-f", action="store_true", help="Force re-download the dataset")
     demo_parser.add_argument(
@@ -232,6 +232,11 @@ def main() -> None:
     # Parse arguments
     args = parser.parse_args()
 
+    # If no mode is specified, show help and exit
+    if args.mode is None:
+        parser.print_help()
+        sys.exit(0)
+
     # Create necessary directories
     datasets_dir = create_directory(args.datasets_dir)
     output_dir = create_directory(args.output_dir)
@@ -240,15 +245,12 @@ def main() -> None:
     device = get_device(args.device)
     print(f"Using device: {device}")
 
-    # If no mode is specified, default to demo
-    mode = args.mode if args.mode else "demo"
-
     # Handle the different modes
-    if mode == "download":
+    if args.mode == "download":
         download_dataset(datasets_dir, force=args.force)
         print("Dataset download completed.")
 
-    elif mode == "train":
+    elif args.mode == "train":
         segmentation_model_path = train_model(
             datasets_dir,
             output_dir,
@@ -259,7 +261,7 @@ def main() -> None:
         )
         print(f"Training completed. Model saved at: {segmentation_model_path}")
 
-    elif mode == "segment":
+    elif args.mode == "segment":
         # Find or use the provided model
         model_path = Path(args.model) if args.model else find_segmentation_model(output_dir)
         if model_path is None or not model_path.is_file():
@@ -274,7 +276,7 @@ def main() -> None:
 
         segment_image(image_path, model_path, output_dir, device=device, show_graph=args.show_graph)
 
-    elif mode == "demo":
+    elif args.mode == "demo":
         # Full demo mode (download, train, evaluate)
         ham10k_image_path, ham10k_metadata_path, ham10k_masks_path = download_dataset(
             datasets_dir, force=getattr(args, "force_download", False)

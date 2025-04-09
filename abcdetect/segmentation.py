@@ -73,7 +73,7 @@ def show_batch_samples(
         alpha: The transparency level for the overlay (0.0 to 1.0).
         num_samples: Number of samples to visualize, should be less than or equal to the batch size.
     """
-
+    print("Visualizing batch samples...\n")
     images, masks = next(iter(loader))  # grab a batch from the loader
     images = images[:num_samples]
     masks = masks[:num_samples]
@@ -608,8 +608,10 @@ def segment_single_image(
     Returns:
         Path to the saved mask file.
     """
+    print("Segmenting image using trained model at ", model_save_path)
+
     model = UNET(in_channels=3, out_channels=1).to(device)
-    model.load_state_dict(torch.load(model_save_path))
+    model.load_state_dict(torch.load(model_save_path, map_location=device))
     model.eval()
 
     image_array = np.array(Image.open(image_path).convert("RGB"))
