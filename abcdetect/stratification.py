@@ -53,14 +53,15 @@ def stratified_sampling(df: pd.DataFrame, stratify_by: str, split_ratios: list[f
     return final_splits
 
 
-def visualize_dx_column_as_histogram(df: pd.DataFrame) -> None:
+def visualize_dx_column_as_histogram(df: pd.DataFrame, df_name: str) -> None:
     """Visualizes the dx column as a histogram.
 
     Args:
         df: The input DataFrame to visualize.
+        df_name: The name of the DataFrame for labeling purposes.
     """
     lesion_histogram = df["dx"].hist(bins=df["dx"].nunique())
-    lesion_histogram.set_title("Lesion Type Histogram")
+    lesion_histogram.set_title(f"Lesion Type Histogram: {df_name}")
     lesion_histogram.set_xlabel("Lesion Type")
     lesion_histogram.set_ylabel("Image Count in HAM 10000 database")
     plt.show()

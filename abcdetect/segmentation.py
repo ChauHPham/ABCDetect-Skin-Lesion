@@ -375,9 +375,9 @@ def train_segmentation_model(
     print("Test set size:", len(test_df))
 
     if show_graph:
-        visualize_dx_column_as_histogram(train_df)
-        visualize_dx_column_as_histogram(validate_df)
-        visualize_dx_column_as_histogram(test_df)
+        visualize_dx_column_as_histogram(train_df, "Train")
+        visualize_dx_column_as_histogram(validate_df, "Validation")
+        visualize_dx_column_as_histogram(test_df, "Test")
 
     learning_rate = 1e-4
     max_epochs = 40
@@ -393,7 +393,7 @@ def train_segmentation_model(
         shuffle=True,
         num_workers=num_workers,
         pin_memory=True,
-        persistent_workers=True,
+        persistent_workers=num_workers > 0,
     )
 
     validation_data = LesionDataset(
@@ -405,7 +405,7 @@ def train_segmentation_model(
         shuffle=False,
         num_workers=num_workers,
         pin_memory=True,
-        persistent_workers=True,
+        persistent_workers=num_workers > 0,
     )
 
     if show_graph:
