@@ -1,10 +1,12 @@
-import sys
 import argparse
-import torch
+import sys
 from pathlib import Path
 
+import torch
+
 from .download_dataset import download
-from .segmentation import evaluate_segmentation_model, train_segmentation_model, segment_single_image
+from .segmentation import (evaluate_segmentation_model, segment_single_image,
+                           train_segmentation_model)
 
 
 def get_device(device_str: str) -> torch.device:

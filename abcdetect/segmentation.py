@@ -13,7 +13,8 @@ from skimage.morphology import remove_small_objects
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
-from .stratification import stratified_sampling, visualize_dx_column_as_histogram
+from .stratification import (stratified_sampling,
+                             visualize_dx_column_as_histogram)
 
 
 class LesionDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
