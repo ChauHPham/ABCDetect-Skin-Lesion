@@ -13,10 +13,7 @@ from skimage.morphology import remove_small_objects
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
-from .stratification import stratified_sampling
-
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print("Using device:", DEVICE)
+from .stratification import stratified_sampling, visualize_dx_column_as_histogram
 
 
 class LesionDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
@@ -237,7 +234,11 @@ def get_evaluation_transform(image_height: int = 192, image_width: int = 256) ->
 
 
 def validate_model(
-    loader: DataLoader[tuple[torch.Tensor, torch.Tensor]], model: nn.Module, loss_fn: nn.Module
+    loader: DataLoader[tuple[torch.Tensor, torch.Tensor]],
+    model: nn.Module,
+    loss_fn: nn.Module,
+    *,
+    device: torch.device,
 ) -> tuple[float, float]:
     """Validates the model on the validation set.
 
@@ -245,6 +246,7 @@ def validate_model(
         loader: DataLoader object for the validation set.
         model: The model to validate.
         loss_fn: Loss function to compute the loss.
+        device: Device to use for validation (e.g., "cuda" or "cpu").
 
     Returns:
         A tuple containing the mean loss and the Dice score.
@@ -258,8 +260,8 @@ def validate_model(
 
     with torch.no_grad():
         for data, targets in loader:
-            data = data.to(DEVICE)
-            targets = targets.float().to(DEVICE)
+            data = data.to(device)
+            targets = targets.float().to(device)
 
             preds = model(data)
             loss = loss_fn(preds, targets)
@@ -287,6 +289,8 @@ def train_model(
     loss_fn: nn.Module,
     optimizer: torch.optim.Optimizer,
     epoch: int,
+    *,
+    device: torch.device,
 ) -> None:
     """Trains the model for one epoch.
 
@@ -296,18 +300,19 @@ def train_model(
         loss_fn: Loss function to compute the loss.
         optimizer: Optimizer for updating the model weights.
         epoch: Current epoch number.
+        device: Device to use for training (e.g., "cuda" or "cpu").
     """
     model.train()
 
-    scaler = torch.amp.GradScaler(DEVICE.type)
+    scaler = torch.amp.GradScaler(device.type)
     loop = tqdm(loader)
 
     for data, targets in loop:
-        data: torch.Tensor = data.to(DEVICE)
-        targets: torch.Tensor = targets.to(DEVICE)
+        data: torch.Tensor = data.to(device)
+        targets: torch.Tensor = targets.to(device)
 
         # Forward
-        with torch.amp.autocast(DEVICE.type, enabled=DEVICE.type == "cuda"):
+        with torch.amp.autocast(device.type, enabled=device.type == "cuda"):
             predictions = model(data)
             loss = loss_fn(predictions, targets)
 
@@ -323,7 +328,15 @@ def train_model(
 
 
 def train_segmentation_model(
-    ham10k_image_path: Path, ham10k_metadata_path: Path, ham10k_masks_path: Path, output_dir: Path
+    ham10k_image_path: Path,
+    ham10k_metadata_path: Path,
+    ham10k_masks_path: Path,
+    output_dir: Path,
+    *,
+    device: torch.device,
+    show_graph: bool = False,
+    batch_size: int = 32,
+    num_workers: int = 0,
 ) -> Path | None:
     """Trains a segmentation model using the HAM10000 dataset.
 
@@ -335,6 +348,10 @@ def train_segmentation_model(
         ham10k_metadata_path: Path to the directory containing the metadata.
         ham10k_masks_path: Path to the directory containing the masks.
         output_dir: Path to save the trained model output.
+        device: Device to use for training (e.g., "cuda" or "cpu").
+        show_graph: Whether to show training graphs.
+        batch_size: Batch size for training.
+        num_workers: Number of workers for DataLoader.
 
     Returns:
         Path to the trained model file.
@@ -357,13 +374,11 @@ def train_segmentation_model(
     print("Validation set size:", len(validate_df))
     print("Test set size:", len(test_df))
 
-    # Uncomment the following lines to visualize the dx column as a histogram
-    # from .stratification import visualize_dx_column_as_histogram
-    # visualize_dx_column_as_histogram(train_df)
-    # visualize_dx_column_as_histogram(validate_df)
-    # visualize_dx_column_as_histogram(test_df)
+    if show_graph:
+        visualize_dx_column_as_histogram(train_df)
+        visualize_dx_column_as_histogram(validate_df)
+        visualize_dx_column_as_histogram(test_df)
 
-    batch_size = 16
     learning_rate = 1e-4
     max_epochs = 40
 
@@ -373,21 +388,33 @@ def train_segmentation_model(
         img_dir=ham10k_image_path, mask_dir=ham10k_masks_path, df=train_df, transform=transform
     )
     train_loader = DataLoader(
-        dataset=training_data, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True
+        dataset=training_data,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+        pin_memory=True,
+        persistent_workers=True,
     )
 
     validation_data = LesionDataset(
         img_dir=ham10k_image_path, mask_dir=ham10k_masks_path, df=validate_df, transform=transform
     )
     validate_loader = DataLoader(
-        dataset=validation_data, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=True
+        dataset=validation_data,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=True,
+        persistent_workers=True,
     )
 
-    # Uncomment the following line to visualize a batch of training samples
-    # show_batch_samples(train_loader)
+    if show_graph:
+        show_batch_samples(train_loader)
 
     # Initialize model instance
-    model = UNET(in_channels=3, out_channels=1).to(DEVICE)
+    model = UNET(in_channels=3, out_channels=1)
+    if device is not None:
+        model.to(device)
 
     loss_fn = nn.BCEWithLogitsLoss()  # Binary loss
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
@@ -403,8 +430,8 @@ def train_segmentation_model(
 
     try:
         for epoch in range(max_epochs):
-            train_model(train_loader, model, loss_fn, optimizer, epoch)
-            mean_loss, dice_score = validate_model(validate_loader, model, loss_fn)
+            train_model(train_loader, model, loss_fn, optimizer, epoch, device=device)
+            mean_loss, dice_score = validate_model(validate_loader, model, loss_fn, device=device)
             mean_losses.append(mean_loss)
             dice_scores.append(dice_score)
 
@@ -424,35 +451,36 @@ def train_segmentation_model(
                 break
     except KeyboardInterrupt:
         print("Training interrupted by user.")
+    finally:  # Always save the model state
+        if best_model_state is not None:  # Load the best model state
+            model.load_state_dict(best_model_state)
+        else:
+            return None  # No model was trained
 
-    if best_model_state is not None:  # Load the best model state
-        model.load_state_dict(best_model_state)
-    else:
-        return None  # No model was trained
+        model_save_path = output_dir / f"segmentation_model_{int(pd.Timestamp.now().timestamp())}.pt"
+        torch.save(model.state_dict(), model_save_path)
+        print(f"Model saved to {model_save_path}.")
 
-    model_save_path = output_dir / f"segmentation_model_{int(pd.Timestamp.now().timestamp())}.pt"
-    torch.save(model.state_dict(), model_save_path)
     print("Training completed.")
-    print(f"Model saved to {model_save_path}.")
+    if show_graph:
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
 
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+        # Plot mean loss
+        ax1.plot(range(1, len(mean_losses) + 1), mean_losses, "b-o")  # blue line with circle markers
+        ax1.set_title("Mean Loss Over Epochs")
+        ax1.set_ylabel("Mean Loss")
+        ax1.grid(True)
 
-    # Plot mean loss
-    ax1.plot(range(1, len(mean_losses) + 1), mean_losses, "b-o")  # blue line with circle markers
-    ax1.set_title("Mean Loss Over Epochs")
-    ax1.set_ylabel("Mean Loss")
-    ax1.grid(True)
+        # Plot dice score
+        ax2.plot(range(1, len(dice_scores) + 1), dice_scores, "r-o")  # red line with circle markers
+        ax2.set_title("Dice Score Over Epochs")
+        ax2.set_xlabel("Epoch")
+        ax2.set_ylabel("Dice Score")
+        ax2.grid(True)
 
-    # Plot dice score
-    ax2.plot(range(1, len(dice_scores) + 1), dice_scores, "r-o")  # red line with circle markers
-    ax2.set_title("Dice Score Over Epochs")
-    ax2.set_xlabel("Epoch")
-    ax2.set_ylabel("Dice Score")
-    ax2.grid(True)
-
-    # Adjust layout
-    plt.tight_layout()
-    plt.show()
+        # Adjust layout
+        plt.tight_layout()
+        plt.show()
     return model_save_path
 
 
@@ -485,6 +513,7 @@ def evaluate_segmentation_model(
     ham10k_masks_path: Path,
     model_save_path: Path,
     *,
+    device: torch.device,
     alpha: float = 0.3,
     num_samples: int = 3,
 ) -> None:
@@ -494,6 +523,7 @@ def evaluate_segmentation_model(
         ham10k_image_path: Path to the directory containing the images.
         ham10k_masks_path: Path to the directory containing the masks.
         model_save_path: Path to the trained model.
+        device: Device to use for evaluation (e.g., "cuda" or "cpu").
         alpha: The transparency level for the overlay (0.0 to 1.0).
         num_samples: Number of samples to visualize.
     """
@@ -502,7 +532,7 @@ def evaluate_segmentation_model(
     fig_size = (12, num_samples * 4)
     fig, axes = plt.subplots(num_samples, 5, figsize=fig_size)
 
-    test_model = UNET(in_channels=3, out_channels=1).to(DEVICE)
+    test_model = UNET(in_channels=3, out_channels=1).to(device)
     test_model.load_state_dict(torch.load(model_save_path))
     test_model.eval()
 
@@ -523,7 +553,7 @@ def evaluate_segmentation_model(
 
         # Apply the model on the input tensor, output a binary mask
         with torch.no_grad():
-            output = test_model(image.unsqueeze(0).to(DEVICE))
+            output = test_model(image.unsqueeze(0).to(device))
             output = torch.sigmoid(output)  # Sigmoid since it's binary
             predicted_mask_array = (output.squeeze().cpu().numpy() > 0.5).astype(np.uint8)
 
@@ -556,19 +586,29 @@ def evaluate_segmentation_model(
     plt.show()
 
 
-def segment_image(image_path: Path, model_save_path: Path, output_dir: Path, *, alpha: float = 0.3) -> Path:
+def segment_single_image(
+    image_path: Path,
+    model_save_path: Path,
+    output_dir: Path,
+    *,
+    device: torch.device,
+    show_graph: bool = False,
+    alpha: float = 0.3,
+) -> Path:
     """Segments a single image using the provided model and saves the mask to the output directory.
 
     Args:
         image_path: Path to the input image.
         model_save_path: Path to the trained model.
         output_dir: Directory to save the generated mask.
+        device: Device to use for evaluation (e.g., "cuda" or "cpu").
+        show_graph: Whether to show the generated mask and overlay.
         alpha: The transparency level for the overlay (0.0 to 1.0).
 
     Returns:
         Path to the saved mask file.
     """
-    model = UNET(in_channels=3, out_channels=1).to(DEVICE)
+    model = UNET(in_channels=3, out_channels=1).to(device)
     model.load_state_dict(torch.load(model_save_path))
     model.eval()
 
@@ -581,7 +621,7 @@ def segment_image(image_path: Path, model_save_path: Path, output_dir: Path, *, 
 
     # Generate the mask using the model
     with torch.no_grad():
-        output = model(image.unsqueeze(0).to(DEVICE))
+        output = model(image.unsqueeze(0).to(device))
         output = torch.sigmoid(output)  # Apply sigmoid for binary segmentation
         predicted_mask_array = (output.squeeze().cpu().numpy() > 0.5).astype(np.uint8)
 
@@ -591,35 +631,36 @@ def segment_image(image_path: Path, model_save_path: Path, output_dir: Path, *, 
     # Save the mask to the output directory
     mask_output_path = output_dir / f"{image_path.stem}_segmentation.png"
     Image.fromarray((enhanced_mask * 255).astype(np.uint8)).save(mask_output_path)
-
-    # Create an overlay for visualization
-    image_array = image.permute(1, 2, 0).cpu().numpy()
-    red_overlay = np.zeros_like(image_array)
-    red_overlay[..., 0] = 1.0  # Red channel only
-
-    overlay = np.where(
-        enhanced_mask[..., None] > 0.5,
-        (1 - alpha) * image_array + alpha * red_overlay,
-        image_array,
-    )
-
-    # Display the results
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-
-    axes[0].imshow(image_array)
-    axes[0].set_title("Original Image")
-    axes[0].axis("off")
-
-    axes[1].imshow(enhanced_mask, cmap="gray")
-    axes[1].set_title("Generated Mask")
-    axes[1].axis("off")
-
-    axes[2].imshow(overlay)
-    axes[2].set_title("Overlay")
-    axes[2].axis("off")
-
-    plt.tight_layout()
-    plt.show()
-
     print(f"Mask saved to {mask_output_path}.")
+
+    if show_graph:
+        # Create an overlay for visualization
+        image_array = image.permute(1, 2, 0).cpu().numpy()
+        red_overlay = np.zeros_like(image_array)
+        red_overlay[..., 0] = 1.0  # Red channel only
+
+        overlay = np.where(
+            enhanced_mask[..., None] > 0.5,
+            (1 - alpha) * image_array + alpha * red_overlay,
+            image_array,
+        )
+
+        # Display the results
+        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+
+        axes[0].imshow(image_array)
+        axes[0].set_title("Original Image")
+        axes[0].axis("off")
+
+        axes[1].imshow(enhanced_mask, cmap="gray")
+        axes[1].set_title("Generated Mask")
+        axes[1].axis("off")
+
+        axes[2].imshow(overlay)
+        axes[2].set_title("Overlay")
+        axes[2].axis("off")
+
+        plt.tight_layout()
+        plt.show()
+
     return mask_output_path

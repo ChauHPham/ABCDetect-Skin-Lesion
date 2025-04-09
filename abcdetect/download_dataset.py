@@ -97,12 +97,13 @@ def move_files(src_dir: Path, dst_dir: Path, exclude_subdirectories: bool = Fals
         print(f"Successfully moved file {path.name}.")
 
 
-def download(datasets_dir: Path) -> tuple[Path, Path, Path]:
+def download(datasets_dir: Path, force: bool = False) -> tuple[Path, Path, Path]:
     """
     Downloads the HAM10000 dataset and its segmentation masks from Kaggle.
 
     Args:
         datasets_dir: The base directory where the datasets will be downloaded.
+        force: Whether to force a re-download when the dataset is already present locally.
 
     Returns:
         A tuple containing the paths to the downloaded image dataset, metadata, and segmentation masks.
@@ -120,19 +121,29 @@ def download(datasets_dir: Path) -> tuple[Path, Path, Path]:
     ham10k_metadata_path = datasets_dir / "kmader" / "metadata"
     ham10k_masks_path = datasets_dir / "tschandl" / "masks"
 
+    if force:
+        print("Removing old HAM10000 dataset files.")
+        shutil.rmtree(ham10k_image_path, ignore_errors=True)
+        shutil.rmtree(ham10k_metadata_path, ignore_errors=True)
+        shutil.rmtree(ham10k_masks_path, ignore_errors=True)
+
     # Download the HAM10000 dataset if it doesn't exist
-    if not ham10k_image_path.exists() or not ham10k_metadata_path.exists():
+    if force or not ham10k_image_path.exists() or not ham10k_metadata_path.exists():
         print("Downloading HAM10000 dataset...")
-        ham10k_dataset_location = download_kaggle_dataset(ham10k_dataset_kaggle_identifier, datasets_dir)
+        ham10k_dataset_location = download_kaggle_dataset(
+            ham10k_dataset_kaggle_identifier, datasets_dir, force_download=force
+        )
 
         merge_dirs(ham10k_dataset_location / "HAM10000_images_part_1", ham10k_image_path, delete_src_dir=True)
         merge_dirs(ham10k_dataset_location / "HAM10000_images_part_2", ham10k_image_path, delete_src_dir=True)
         move_files(ham10k_dataset_location, ham10k_metadata_path, exclude_subdirectories=True)
 
     # Download the segmentation masks dataset if it doesn't exist
-    if not ham10k_masks_path.exists():
+    if force or not ham10k_masks_path.exists():
         print("Downloading HAM10000 segmentation masks dataset...")
-        ham10k_masks_dataset_location = download_kaggle_dataset(ham10k_masks_kaggle_identifier, datasets_dir)
+        ham10k_masks_dataset_location = download_kaggle_dataset(
+            ham10k_masks_kaggle_identifier, datasets_dir, force_download=force
+        )
 
         merge_dirs(
             ham10k_masks_dataset_location / "HAM10000_segmentations_lesion_tschandl",
