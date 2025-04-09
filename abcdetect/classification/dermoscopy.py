@@ -2,11 +2,13 @@
 import cv2
 import numpy as np
 import os
+from skimage.util import view_as_windows
+
 
 def compute_dermoscopic_score(image: np.ndarray, mask: np.ndarray, save_vis_path: str = None) -> dict:
     """
     Compute dermoscopic structure score (Part D of ABCD rule).
-    Visualizes detected dots and globules if save_vis_path is provided.
+    Visualizes detected dots, globules, and structureless areas if save_vis_path is provided.
     """
     lesion = cv2.bitwise_and(image, image, mask=mask)
     gray = cv2.cvtColor(lesion, cv2.COLOR_BGR2GRAY)
@@ -15,17 +17,16 @@ def compute_dermoscopic_score(image: np.ndarray, mask: np.ndarray, save_vis_path
     _, thresh = cv2.threshold(blurred, 80, 255, cv2.THRESH_BINARY_INV)
 
     contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    print(f"[DEBUG] Total contours found: {len(contours)}")
+    print(f"Total contours found: {len(contours)}")
 
     dots = 0
     globules = 0
-
     vis_img = image.copy()
+    structureless_overlay = np.zeros_like(image)
 
     for cnt in contours:
         area = cv2.contourArea(cnt)
-        print(f"[DEBUG] Contour area: {area:.2f}")
+        print(f"Contour area: {area:.2f}")
         (x, y), radius = cv2.minEnclosingCircle(cnt)
         center = (int(x), int(y))
         radius = int(radius)
@@ -42,17 +43,45 @@ def compute_dermoscopic_score(image: np.ndarray, mask: np.ndarray, save_vis_path
     has_dots = dots > 0
     has_globules = globules > 0
 
+    # Structureless detection via local variance
+    masked_gray = cv2.bitwise_and(gray, gray, mask=mask)
+    window_size = 9
+    windows = view_as_windows(masked_gray, (window_size, window_size))
+    variances = np.var(windows, axis=(2, 3))
+
+    low_var_map = variances < 15
+    percent_low_var = np.sum(low_var_map) / low_var_map.size
+    has_structureless = bool(percent_low_var > 0.20)
+
+    print(f"Structureless area %: {percent_low_var:.2f}")
+
+    # Smooth and visualize structureless regions as semi-transparent yellow overlay
+    if save_vis_path:
+        stride = 1
+        for i in range(low_var_map.shape[0]):
+            for j in range(low_var_map.shape[1]):
+                if low_var_map[i, j]:
+                    top_left = (j, i)
+                    bottom_right = (j + window_size, i + window_size)
+                    cv2.rectangle(structureless_overlay, top_left, bottom_right, (0, 255, 255), -1)  # filled yellow
+        vis_img = cv2.addWeighted(vis_img, 1.0, structureless_overlay, 0.3, 0)
+
     has_pigment_network = None
     has_streaks = None
-    has_structureless = None
 
-    present_features = sum([int(has_dots), int(has_globules), 0, 0, 0])
+    present_features = sum([
+        int(has_dots),
+        int(has_globules),
+        0,  # pigment network
+        0,  # streaks
+        int(has_structureless)
+    ])
     D_score = present_features * 0.5
 
     if save_vis_path:
         os.makedirs(os.path.dirname(save_vis_path), exist_ok=True)
         cv2.imwrite(save_vis_path, vis_img)
-        print(f"[INFO] Saved blob visualization to {save_vis_path}")
+        print(f"Saved blob + structureless visualization to {save_vis_path}")
 
     return {
         "dots": has_dots,
@@ -84,7 +113,7 @@ if __name__ == "__main__":
             raise FileNotFoundError(f"Mask not found: {mask_path}")
     else:
         mask = np.ones(image.shape[:2], dtype=np.uint8) * 255
-        print("[INFO] No mask provided. Using full image as lesion mask.")
+        print("No mask provided. Using full image as lesion mask.")
 
     image_filename = os.path.splitext(os.path.basename(image_path))[0]
     vis_path = f"output/visuals/{image_filename}_detections.jpg"
