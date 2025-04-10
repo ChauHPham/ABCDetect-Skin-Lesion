@@ -33,7 +33,7 @@ def calculate_border_score(image: np.ndarray, mask: np.ndarray, *, show_graph: b
     image = image * binary_mask_3c 
 
     # Set legion image to grayscale
-    grayimage = cv2.cvtColor(maskedimage, cv2.COLOR_BGR2GRAY)
+    grayimage = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
     # Set lesion image as 8 bit
     newimage = grayimage.astype(np.uint8)
@@ -74,7 +74,7 @@ def calculate_border_score(image: np.ndarray, mask: np.ndarray, *, show_graph: b
             axes[3].imshow(cannyedges, cmap='gray')
             axes[3].set_title('Canny Edge Detection', fontsize= 'x-large')
             axes[3].axis('off')
-            fig.text(0.5, 0.1, 'Border Score: {}'.format(border_score), fontsize= 'x-large', horizontalalignment='center', wrap=True ) 
+            fig.text(0.5, 0.1, 'Border Score: {}'.format(border_score), fontsize= 'large', horizontalalignment='center', wrap=True ) 
             plt.tight_layout()
             plt.show()
          
