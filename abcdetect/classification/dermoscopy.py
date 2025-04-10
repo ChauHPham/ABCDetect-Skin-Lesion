@@ -5,6 +5,14 @@ import os
 from skimage.util import view_as_windows
 
 
+# --- Area conversion utils (assuming ~0.1 mm/pixel) ---
+def pixels_to_mm2(area_px):
+    return area_px * 0.01  # ≈ 0.1mm/pixel → 0.01 mm²/pixel
+
+def mm2_to_pixels(area_mm2):
+    return area_mm2 / 0.01
+
+
 def compute_dermoscopic_score(image: np.ndarray, mask: np.ndarray, save_vis_path: str = None) -> dict:
     """
     Compute dermoscopic structure score (Part D of ABCD rule).
@@ -31,11 +39,13 @@ def compute_dermoscopic_score(image: np.ndarray, mask: np.ndarray, save_vis_path
         center = (int(x), int(y))
         radius = int(radius)
 
-        if 10 <= area < 50:
+        # Dot: 10–50 px² ≈ 0.1–0.5 mm²
+        # Globule: 50–200 px² ≈ 0.5–2.0 mm²
+        if mm2_to_pixels(0.1) <= area < mm2_to_pixels(0.5):
             dots += 1
             if save_vis_path:
                 cv2.circle(vis_img, center, radius, (0, 255, 0), 2)  # Green for dots
-        elif 50 <= area < 200:
+        elif mm2_to_pixels(0.5) <= area < mm2_to_pixels(2.0):
             globules += 1
             if save_vis_path:
                 cv2.circle(vis_img, center, radius, (0, 0, 255), 2)  # Red for globules
