@@ -1,8 +1,20 @@
-# abcdetect/classification/dermoscopy.py
+import os
+
 import cv2
 import numpy as np
-import os
 from skimage.util import view_as_windows
+
+
+def calculate_dermoscopic_structure_score(image: np.ndarray, mask: np.ndarray) -> int:
+    """Calculate dermoscopic structure score for the lesion according to ABCD rule.
+    Args:
+        image: RGB image of the lesion as a NumPy array.
+        mask: Binary mask (same size as image) delineating the lesion.
+
+    Returns:
+        Dermoscopic structure score (0 to 5) based on the presence of dots, globules, and structureless areas.
+    """
+    return compute_dermoscopic_score(image, mask)["D_score"]
 
 
 # --- Area conversion utils (assuming ~0.1 mm/pixel) ---
@@ -14,9 +26,23 @@ def mm2_to_pixels(area_mm2):
 
 
 def compute_dermoscopic_score(image: np.ndarray, mask: np.ndarray, save_vis_path: str = None) -> dict:
-    """
-    Compute dermoscopic structure score (Part D of ABCD rule).
+    """Compute dermoscopic structure score (Part D of ABCD rule).
+
     Visualizes detected dots, globules, and structureless areas if save_vis_path is provided.
+
+    Args:
+        image: RGB image of the lesion as a NumPy array.
+        mask: Binary mask (same size as image) delineating the lesion.
+        save_vis_path: Path to save visualization image (if provided).
+
+    Returns:
+        Dictionary containing:
+            - dots: Boolean indicating presence of dots.
+            - globules: Boolean indicating presence of globules.
+            - D_score: Dermoscopic structure score.
+            - pigment_network: Boolean indicating presence of pigment network (not implemented).
+            - streaks: Boolean indicating presence of streaks (not implemented).
+            - structureless_areas: Boolean indicating presence of structureless areas.
     """
     lesion = cv2.bitwise_and(image, image, mask=mask)
     gray = cv2.cvtColor(lesion, cv2.COLOR_BGR2GRAY)
@@ -86,7 +112,6 @@ def compute_dermoscopic_score(image: np.ndarray, mask: np.ndarray, save_vis_path
         0,  # streaks
         int(has_structureless)
     ])
-    D_score = present_features * 0.5
 
     if save_vis_path:
         os.makedirs(os.path.dirname(save_vis_path), exist_ok=True)
@@ -96,7 +121,7 @@ def compute_dermoscopic_score(image: np.ndarray, mask: np.ndarray, save_vis_path
     return {
         "dots": has_dots,
         "globules": has_globules,
-        "D_score": D_score,
+        "D_score": present_features,
         "pigment_network": has_pigment_network,
         "streaks": has_streaks,
         "structureless_areas": has_structureless

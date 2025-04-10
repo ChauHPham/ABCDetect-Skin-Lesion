@@ -14,7 +14,8 @@ from skimage.morphology import remove_small_objects
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
-from .stratification import stratified_sampling, visualize_dx_column_as_histogram
+from .stratification import (stratified_sampling,
+                             visualize_dx_column_as_histogram)
 
 
 class LesionDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
@@ -683,7 +684,9 @@ def segment_single_image(
     model.load_state_dict(torch.load(model_save_path, map_location=device))
     model.eval()
 
-    image_array = np.array(Image.open(image_path).convert("RGB"))
+    orig_image = Image.open(image_path).convert("RGB")
+    orig_width, orig_height = orig_image.size
+    image_array = np.array(orig_image)
 
     # Apply transformations to the image
     transform = get_evaluation_transform()
@@ -699,35 +702,49 @@ def segment_single_image(
     # Enhance the predicted mask
     enhanced_mask = enhance_prediction_mask(predicted_mask_array)
 
+    # Create a higher resolution version for smoother resizing
+    upscaled_mask = cv2.resize(
+        enhanced_mask.astype(np.float32),
+        (enhanced_mask.shape[1] * 4, enhanced_mask.shape[0] * 4),
+        interpolation=cv2.INTER_LINEAR,
+    )
+    blurred_mask = cv2.GaussianBlur(upscaled_mask, (9, 9), 2.0)
+
+    # Resize to original image dimensions with cubic interpolation
+    smooth_mask = cv2.resize(blurred_mask, (orig_width, orig_height), interpolation=cv2.INTER_CUBIC)
+
+    # Threshold but retain some edge smoothness
+    final_mask = (smooth_mask > 0.5).astype(np.uint8)
+
     # Save the mask to the output directory
     mask_output_path = output_dir / f"{image_path.stem}_segmentation.png"
-    Image.fromarray((enhanced_mask * 255).astype(np.uint8)).save(mask_output_path)
+    Image.fromarray((final_mask * 255).astype(np.uint8)).save(mask_output_path)
     print(f"Mask saved to {mask_output_path}.")
 
     if show_graph:
-        # Create an overlay for visualization
-        image_array = image.permute(1, 2, 0).cpu().numpy()
-        red_overlay = np.zeros_like(image_array)
-        red_overlay[..., 0] = 1.0  # Red channel only
-
-        overlay = np.where(
-            enhanced_mask[..., None] > 0.5,
-            (1 - alpha) * image_array + alpha * red_overlay,
-            image_array,
-        )
+        # Create visualizations
+        orig_array = np.array(orig_image) / 255.0
+        orig_red = np.zeros_like(orig_array)
+        orig_red[..., 0] = 1.0
 
         # Display the results
         fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
-        axes[0].imshow(image_array)
+        axes[0].imshow(orig_image)
         axes[0].set_title("Original Image")
         axes[0].axis("off")
 
-        axes[1].imshow(enhanced_mask, cmap="gray")
+        axes[1].imshow(final_mask, cmap="gray")
         axes[1].set_title("Generated Mask")
         axes[1].axis("off")
 
-        axes[2].imshow(overlay)
+        # Create overlay with smoothed mask
+        orig_overlay = np.where(
+            final_mask[..., None] > 0.5,
+            (1 - alpha) * orig_array + alpha * orig_red,
+            orig_array,
+        )
+        axes[2].imshow(orig_overlay)
         axes[2].set_title("Overlay")
         axes[2].axis("off")
 

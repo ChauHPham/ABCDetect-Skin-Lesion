@@ -2,8 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2 
 
-def calculate_border(image: np.ndarray, mask: np.ndarray, *, show_graph: bool = False) -> float:
-    """ Calculate the border score for the lesion according to ABCD rule.
+def calculate_border_score(image: np.ndarray, mask: np.ndarray, *, show_graph: bool = False) -> int:
+    """Calculate the border score for the lesion according to ABCD rule.
 
     The border score is evaluated through the presence of sharp distinct edges or gradual indistinct edges.
     Legions are divided into 8 segments, and each segment is processed using Canny Edge Detection.
@@ -17,8 +17,7 @@ def calculate_border(image: np.ndarray, mask: np.ndarray, *, show_graph: bool = 
         show_graph: If True, display visualization graph for detected border (weak and strong edges).
 
     Returns:
-        TDS contribution score for border classification.
-
+        Border score (0 to 8) based on the presence of distinct edges.
     """
     # Optional: Segmented mask may interfere with border detection
     # Overlay binary mask on top of RGB legion image
@@ -61,9 +60,7 @@ def calculate_border(image: np.ndarray, mask: np.ndarray, *, show_graph: bool = 
             plt.imshow(cannyedges, cmap = 'gray')
             plt.show()
          
-    # Normalize the border score between (0,1) as contribution score for TDS 
-    tds_score = border_score / 8
-    return tds_score
+    return border_score
 
 
 def segment_edge_detection (image_segment):
@@ -108,7 +105,7 @@ if __name__ == '__main__':
     # mask = np.zeros((256, 256), dtype=np.uint8)
 
     # Calculate color score.
-    score = calculate_border(img, mask, show_graph=True)
+    score = calculate_border_score(img, mask, show_graph=True)
     print("TDS Border Contribution score:", score)
 
     sys.exit(0)

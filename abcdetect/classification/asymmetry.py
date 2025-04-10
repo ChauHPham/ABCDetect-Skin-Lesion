@@ -6,7 +6,7 @@ import numpy as np
 from skimage import feature
 
 
-def calculate_asymmetry(image: np.ndarray, mask: np.ndarray, *, show_graph: bool = False) -> float:
+def calculate_asymmetry_score(image: np.ndarray, mask: np.ndarray, *, show_graph: bool = False) -> float:
     """Calculate asymmetry score for the lesion according to ABCD rule.
 
     Args:

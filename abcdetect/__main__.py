@@ -4,6 +4,7 @@ from pathlib import Path
 
 import torch
 
+from .classification import analyze_abcd_features, classify_lesion
 from .download_dataset import download
 from .segmentation import (evaluate_segmentation_model, segment_single_image,
                            train_segmentation_model)
@@ -150,8 +151,57 @@ def segment_image(
         device: Device to use for segmentation (CPU or GPU).
         show_graph: If True, display segmentation graphs.
     """
-    print(f"Segmenting image {image_path} using model {model_path} on {device}")
+    print(f"Segmenting image {image_path} using model {model_path}")
     segment_single_image(image_path, model_path, output_dir, device=device, show_graph=show_graph)
+
+
+def analyze_image(
+    image_path: Path, model_path: Path, output_dir: Path, device: torch.device, show_graph: bool = False
+) -> None:
+    """Segment an image and perform ABCD analysis on it.
+
+    Args:
+        image_path: Path to the image to analyze.
+        model_path: Path to the trained segmentation model.
+        output_dir: Directory to save temporary files.
+        device: Device to use for segmentation (CPU or GPU).
+        show_graph: If True, display visualizations.
+    """
+    print(f"Analyzing image {image_path} using model {model_path}")
+
+    # Segment the image
+    mask_path = segment_single_image(image_path, model_path, output_dir, device=device, show_graph=show_graph)
+
+    # Perform ABCD analysis
+    results = analyze_abcd_features(image_path, mask_path, show_graph=show_graph)
+
+    # Classify the lesion
+    classification = classify_lesion(results["tds"])
+
+    # Output results
+    print("\n===== ABCD ANALYSIS RESULTS =====")
+    print(f"Asymmetry score: {results['asymmetry']:.2f}")
+    print(f"Border score: {results['border']:.2f}")
+    print(f"Colour score: {results['colour']:.2f}")
+    print(f"Dermoscopic structure score: {results['dermoscopic_structure']:.2f}")
+    print(f"Total Dermoscopic Score (TDS): {results['tds']:.2f}")
+    print(f"Classification: {classification}")
+    print("=================================\n")
+
+    # Save a copy of the results to the output directory
+    result_file = output_dir / f"{image_path.stem}_analysis_results.txt"
+    with open(result_file, "w") as f:
+        f.write("===== ABCD ANALYSIS RESULTS =====\n")
+        f.write(f"Image: {image_path}\n")
+        f.write(f"Asymmetry score: {results['asymmetry']:.2f}\n")
+        f.write(f"Border score: {results['border']:.2f}\n")
+        f.write(f"Colour score: {results['colour']:.2f}\n")
+        f.write(f"Dermoscopic structure score: {results['dermoscopic_structure']:.2f}\n")
+        f.write(f"Total Dermoscopic Score (TDS): {results['tds']:.2f}\n")
+        f.write(f"Classification: {classification}\n")
+        f.write("=================================\n")
+
+    print(f"Results saved to {result_file}")
 
 
 def main() -> None:
@@ -211,6 +261,16 @@ def main() -> None:
     segment_parser = subparsers.add_parser("segment", help="Segment an image using a trained model")
     segment_parser.add_argument("--image", "-i", type=str, required=True, help="Path to the image to segment")
     segment_parser.add_argument(
+        "--model",
+        "-m",
+        type=str,
+        help="Path to the model file (uses latest model in output directory if not specified)",
+    )
+
+    # Analyze mode
+    analyze_parser = subparsers.add_parser("analyze", help="Analyze an image using ABCD criteria")
+    analyze_parser.add_argument("--image", "-i", type=str, required=True, help="Path to the image to analyze")
+    analyze_parser.add_argument(
         "--model",
         "-m",
         type=str,
@@ -277,6 +337,21 @@ def main() -> None:
             sys.exit(1)
 
         segment_image(image_path, model_path, output_dir, device=device, show_graph=args.show_graph)
+
+    elif args.mode == "analyze":
+        # Find or use the provided model
+        model_path = Path(args.model) if args.model else find_segmentation_model(output_dir)
+        if model_path is None or not model_path.is_file():
+            print("No segmentation model found. Please train a model first or specify a valid model file.")
+            sys.exit(1)
+
+        # Analyze the image
+        image_path = Path(args.image)
+        if not image_path.is_file():
+            print(f"Image not found: {image_path}")
+            sys.exit(1)
+
+        analyze_image(image_path, model_path, output_dir, device=device, show_graph=args.show_graph)
 
     elif args.mode == "demo":
         # Full demo mode (download, train, evaluate)
