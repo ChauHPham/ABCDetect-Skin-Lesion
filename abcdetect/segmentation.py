@@ -32,7 +32,7 @@ class LesionDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
         super().__init__()
         self.mask_dir = mask_dir
         self.img_dir = img_dir
-        self.images = df["image_id"].astype(str).tolist()
+        self.images = df["image_id"].astype(str).values
         self.transform = transform
 
     def __len__(self) -> int:
@@ -191,6 +191,23 @@ class UNET(nn.Module):
         return self.final_conv_fn(x)
 
 
+class DiceBCELoss(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.bce = nn.BCEWithLogitsLoss()
+
+    def forward(self, inputs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        bce_loss = self.bce(inputs, targets)
+
+        # Dice loss component
+        inputs_sigmoid = torch.sigmoid(inputs)
+        intersection = (inputs_sigmoid * targets).sum()
+        dice_loss = 1 - (2.0 * intersection) / (inputs_sigmoid.sum() + targets.sum() + 1e-8)
+
+        # Combine losses
+        return 0.5 * bce_loss + 0.5 * dice_loss
+
+
 def get_training_transform(image_height: int = 192, image_width: int = 256) -> A.Compose:
     """Defines the training transformations for the dataset.
 
@@ -204,9 +221,17 @@ def get_training_transform(image_height: int = 192, image_width: int = 256) -> A
     return A.Compose(
         [
             A.Resize(image_height, image_width),
+            # A.Lambda(image=lambda x: cv2.morphologyEx(
+            #     x,
+            #     cv2.MORPH_BLACKHAT,
+            #     cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+            # )),
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
             A.Rotate(limit=30, p=0.5),
+            A.RandomBrightnessContrast(p=0.2),
+            A.GaussianBlur(blur_limit=3, p=0.1),
+            A.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1, p=0.3),
             A.Normalize(mean=(0.0, 0.0, 0.0), std=(1.0, 1.0, 1.0), max_pixel_value=255.0),
             A.ToTensorV2(),
         ]
@@ -325,7 +350,7 @@ def train_model(
 
         # Update tqdm loop
         loop.set_description(f"Epoch [{epoch}]")
-        loop.set_postfix(loss=loss.item())
+        loop.set_postfix(loss=loss.item(), lr=optimizer.param_groups[0]["lr"])
 
 
 def train_segmentation_model(
@@ -380,9 +405,6 @@ def train_segmentation_model(
         visualize_dx_column_as_histogram(validate_df, "Validation")
         visualize_dx_column_as_histogram(test_df, "Test")
 
-    learning_rate = 1e-4
-    max_epochs = 40
-
     transform = get_training_transform()
 
     training_data = LesionDataset(
@@ -413,15 +435,27 @@ def train_segmentation_model(
         show_batch_samples(train_loader)
 
     # Initialize model instance
-    model = UNET(in_channels=3, out_channels=1)
-    if device is not None:
-        model.to(device)
+    model = UNET(in_channels=3, out_channels=1).to(device)
 
-    loss_fn = nn.BCEWithLogitsLoss()  # Binary loss
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    learning_rate = 1e-4  # Initial learning rate
+    max_epochs = 40
+
+    loss_fn = DiceBCELoss().to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-5)
+
+    # ReduceLROnPlateau reduces learning rate when dice score plateaus
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer,
+        mode="max",  # higher is better for dice score
+        factor=0.5,  # Reduce LR by half when plateau is detected
+        patience=3,  # Wait for 3 epochs of no improvement
+        verbose=True,
+        min_lr=1e-6,  # Don't reduce LR below this value
+    )
 
     mean_losses = []
     dice_scores = []
+    learning_rates = []
 
     # Early stopping parameters
     patience = 5  # Number of epochs to wait for improvement
@@ -431,20 +465,29 @@ def train_segmentation_model(
 
     try:
         for epoch in range(max_epochs):
+            # Store current learning rate
+            current_lr = optimizer.param_groups[0]["lr"]
+            learning_rates.append(current_lr)
+
             train_model(train_loader, model, loss_fn, optimizer, epoch, device=device)
             mean_loss, dice_score = validate_model(validate_loader, model, loss_fn, device=device)
             mean_losses.append(mean_loss)
             dice_scores.append(dice_score)
+
+            # Update learning rate scheduler based on dice score
+            scheduler.step(dice_score)
 
             # Check if this is the best model so far
             if dice_score > best_dice:
                 best_dice = dice_score
                 patience_counter = 0
                 best_model_state = model.state_dict().copy()
-                print(f"✅ New best model saved! Dice score: {best_dice:.4f}")
+                print(f"✅ New best model saved! Dice score: {best_dice:.4f}, LR: {current_lr:.7f}")
             else:
                 patience_counter += 1
-                print(f"⏳ No improvement for {patience_counter} epochs. Best dice: {best_dice:.4f}")
+                print(
+                    f"⏳ No improvement for {patience_counter} epochs. Best dice: {best_dice:.4f}, LR: {current_lr:.7f}"
+                )
 
             # Early stopping check
             if patience_counter >= patience:
@@ -464,7 +507,7 @@ def train_segmentation_model(
 
     print("Training completed.")
     if show_graph:
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), sharex=True)
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(10, 12), sharex=True)
 
         # Plot mean loss
         ax1.plot(range(1, len(mean_losses) + 1), mean_losses, "b-o")  # blue line with circle markers
@@ -475,9 +518,16 @@ def train_segmentation_model(
         # Plot dice score
         ax2.plot(range(1, len(dice_scores) + 1), dice_scores, "r-o")  # red line with circle markers
         ax2.set_title("Dice Score Over Epochs")
-        ax2.set_xlabel("Epoch")
         ax2.set_ylabel("Dice Score")
         ax2.grid(True)
+
+        # Plot learning rate
+        ax3.plot(range(1, len(learning_rates) + 1), learning_rates, "g-o")  # green line with circle markers
+        ax3.set_title("Learning Rate Over Epochs")
+        ax3.set_xlabel("Epoch")
+        ax3.set_ylabel("Learning Rate")
+        ax3.set_yscale("log")  # Log scale makes LR changes more visible
+        ax3.grid(True)
 
         # Adjust layout
         plt.tight_layout()
