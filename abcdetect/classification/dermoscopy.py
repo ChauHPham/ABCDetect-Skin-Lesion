@@ -44,16 +44,25 @@ def detect_dots_and_globules(gray_img, mask, image, *, save_vis_path=None, show_
 
     for cnt in contours:
         area = cv2.contourArea(cnt)
-        (x, y), radius = cv2.minEnclosingCircle(cnt)
-        center = (int(x), int(y))
-        radius = int(radius)
+        perimeter = cv2.arcLength(cnt, True)
+        circularity = 4 * np.pi * area / (perimeter ** 2 + 1e-5)
 
-        if mm2_to_pixels(0.1) <= area < mm2_to_pixels(0.5):
-            dots += 1
-            cv2.circle(vis_img, center, radius, (0, 255, 0), 2)  # Green for dots
-        elif mm2_to_pixels(0.5) <= area < mm2_to_pixels(2.0):
-            globules += 1
-            cv2.circle(vis_img, center, radius, (0, 0, 255), 2)  # Red for globules
+        x, y, w, h = cv2.boundingRect(cnt)
+        aspect_ratio = float(w) / h
+
+        # Combine shape filters
+        is_circular = circularity > 0.7
+        is_squareish = 0.75 < aspect_ratio < 1.25
+
+        if is_circular and is_squareish:
+        # Only now check for size and classify
+            if mm2_to_pixels(0.1) <= area < mm2_to_pixels(0.5):
+                dots += 1
+                cv2.circle(vis_img, (int(x + w / 2), int(y + h / 2)), int(max(w, h) / 2), (0, 255, 0), 2)  # Green
+            elif mm2_to_pixels(0.5) <= area < mm2_to_pixels(2.0):
+                globules += 1
+                cv2.circle(vis_img, (int(x + w / 2), int(y + h / 2)), int(max(w, h) / 2), (0, 0, 255), 2)  # Red
+
     if show_graph:
         fig, axes = plt.subplots(1, 4, figsize=(16, 4))
 
@@ -202,7 +211,8 @@ def compute_dermoscopic_score(image: np.ndarray, mask: np.ndarray, save_vis_path
     # Save visualization if requested
     if save_vis_path:
         os.makedirs(os.path.dirname(save_vis_path), exist_ok=True)
-        cv2.imwrite(save_vis_path, vis_img)
+        vis_img_rgb = cv2.cvtColor(vis_img, cv2.COLOR_BGR2RGB)
+        cv2.imwrite(save_vis_path, vis_img_rgb)
         print(f"Saved visualization to {save_vis_path}")
 
     return {
@@ -239,6 +249,6 @@ if __name__ == "__main__":
 
     image_filename = os.path.splitext(os.path.basename(image_path))[0]
     vis_path = f"output/visuals/{image_filename}_detections.jpg"
-    show_graph = True  # or False if you want to disable visualization
+    show_graph = True  
     result = compute_dermoscopic_score(image, mask, save_vis_path=vis_path,show_graph=show_graph)
     print("Detected dermoscopic structures:", result)
