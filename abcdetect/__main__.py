@@ -6,8 +6,7 @@ import torch
 
 from .classification import analyze_abcd_features, classify_lesion
 from .download_dataset import download
-from .segmentation import (evaluate_segmentation_model, segment_single_image,
-                           train_segmentation_model)
+from .segmentation import evaluate_segmentation_model, segment_single_image, train_segmentation_model
 
 
 def get_device(device_str: str) -> torch.device:
@@ -208,7 +207,7 @@ def analyze_multiple_images(
     image_paths: list[Path], model_path: Path, output_dir: Path, device: torch.device
 ) -> None:
     """Segment and analyze multiple images using ABCD criteria.
-    
+
     Args:
         image_paths: List of paths to the images to analyze.
         model_path: Path to the trained segmentation model.
@@ -216,7 +215,7 @@ def analyze_multiple_images(
         device: Device to use for segmentation (CPU or GPU).
     """
     print(f"\n===== Analyzing {len(image_paths)} images =====")
-    
+
     for image_path in image_paths:
         print(f"\nProcessing image: {image_path.name}")
         try:
@@ -256,8 +255,6 @@ def main() -> None:
             default="auto",
             help="Device to use for model training/inference (default: auto-detect)",
         )
-
-    add_common_arguments(parser)
 
     # Create subparsers for different modes
     subparsers = parser.add_subparsers(dest="mode", help="Operation mode")
@@ -407,7 +404,7 @@ def main() -> None:
 
         # Evaluate the model
         evaluate_segmentation_model(ham10k_image_path, ham10k_masks_path, segmentation_model_path, device=device)
-        
+
         # Analyze demo images
         demo_dir = Path(__file__).parent.parent / "demo"
         if demo_dir.exists() and demo_dir.is_dir():
