@@ -20,12 +20,12 @@ def calculate_border(image: np.ndarray, mask: np.ndarray, *, show_graph: bool = 
         TDS contribution score for border classification.
 
     """
-    # Segmented mask may interfere with border detection
+    # Optional: Segmented mask may interfere with border detection
     # Overlay binary mask on top of RGB legion image
-    # image = cv2.bitwise_and(image,mask)
+    image = cv2.bitwise_and(image,mask)
     
-    # Segmented image 
-    # cv2.imshow("AND", maskedimage)
+    # Visualize image with mask on 
+    cv2.imshow("AND", image)
 
     # Set legion image to grayscale
     grayimage = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -36,7 +36,7 @@ def calculate_border(image: np.ndarray, mask: np.ndarray, *, show_graph: bool = 
     # Greyscale image of segmented legion
     cv2.imshow("AND", newimage)
 
-    # Slice image into 8 equal segments to evaluate border score for each 
+    # Slice image into 8 segments to evaluate border score for each 
     # Height and width are floats 
     height, width = newimage.shape
     image_segments = []
@@ -46,17 +46,23 @@ def calculate_border(image: np.ndarray, mask: np.ndarray, *, show_graph: bool = 
             image_segments.append(segment)
     
     # Calculate the edges and obtain the score for each segment
-    # segment_score = [segment_edge_detection(segment) for segment in image_segments]
     border_score = 0
     for segment in image_segments:
         segment_score = segment_edge_detection(segment)
-        print(segment_score)
         # Add up the score of each segment for total border score 
         border_score += segment_score
+    
+    if show_graph:
+            # Visualize the whole image after canny edge detection
+            # Adjust thresholds to be the same values as the segment edge detection function
+            low_threshold = 70
+            high_threshold = 100 
+            cannyedges = cv2.Canny(newimage, low_threshold, high_threshold)
+            plt.imshow(cannyedges, cmap = 'gray')
+            plt.show()
          
     # Normalize the border score between (0,1) as contribution score for TDS 
     tds_score = border_score / 8
-
     return tds_score
 
 
@@ -66,27 +72,25 @@ def segment_edge_detection (image_segment):
         Returns 1 if distinct edges found, returns 0 if no distinct edges found.
         """
         # Find high gradient edges of segmented image
-        # Lower threshold (for weak edges): 20
-        # Higher threshold (for definite edges): 100 
-        image_edges = cv2.Canny(image_segment, 20, 100)
-        # Compute perimeter to area ratio for edges found
+        # Adjust lower and higher thresholds for stronger edges 
+        low_threshold = 70
+        high_threshold = 100 
+        image_edges = cv2.Canny(image_segment, low_threshold, high_threshold)
+
+        # Compute perimeter to area ratio for segments + edges found
         image_contours, _ = cv2.findContours(image_edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         contour_area = cv2.contourArea(image_contours[0])
 
-        # Visualize the border detection of each segment 
-        plt.imshow(image_edges, cmap = 'gray')
-        plt.show()
-
         # Compare against border threshold value to differentiate distinct VS indistinct edges
-        border_threshold = 1
-        print("Contour area:", contour_area)
-        if contour_area > border_threshold:
+        # Border threshold value should be adjusted based on validated border strength 
+        border_threshold = 0.2
+        if contour_area >= border_threshold:
             # Distinct border in this segment found, return score of +1
-            return 1 
+            return 1
         else:
             # Indistinct border in this segment found, return score of 0
-            return 0 
-        
+            return 0
+    
 def rgb2gray (image):
     """ Set RGB image of legion to grayscale for edge detection"""
     return np.dot(image[...,:3], [0.2989, 0.5870, 0.1140])
@@ -96,8 +100,8 @@ if __name__ == '__main__':
     import sys
 
     # Testing image 
-    img = cv2.imread(r"D:\School\Classes\CMPT419\project\Skin Lesion Sample Set-20250410T015009Z-001\Skin Lesion Sample Set\ISIC_0024545.jpg")
-    mask = cv2.imread(r"D:\School\Classes\CMPT419\project\Skin Lesion Sample Set-20250410T015009Z-001\Skin Lesion Sample Set\ISIC_0024475_segmentation.png")
+    img = cv2.imread(r"D:\School\Classes\CMPT419\project\Skin Lesion Sample Set-20250410T015009Z-001\Skin Lesion Sample Set\ISIC_0024306.jpg")
+    mask = cv2.imread(r"D:\School\Classes\CMPT419\project\Skin Lesion Sample Set-20250410T015009Z-001\Skin Lesion Sample Set\ISIC_0024306_segmentation.png")
 
     # Placeholder image 
     # img = np.random.randint(0, 255, (256, 256, 3), dtype=np.uint8)
@@ -107,5 +111,4 @@ if __name__ == '__main__':
     score = calculate_border(img, mask, show_graph=True)
     print("TDS Border Contribution score:", score)
 
-    # Exit gracefully.
     sys.exit(0)
