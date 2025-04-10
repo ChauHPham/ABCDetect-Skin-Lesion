@@ -20,14 +20,17 @@ def calculate_border_score(image: np.ndarray, mask: np.ndarray, *, show_graph: b
         Border score (0 to 8) based on the presence of distinct edges.
     """
 
-    # Check that image and mask have the same size (height and width)
-    target_shape = (mask.shape[1], mask.shape[0])
-    image = cv2.resize(image, target_shape)
+    # Ensure image and mask are the same size
+    if image.shape[:2] != mask.shape[:2]:
+        target_shape = (mask.shape[1], mask.shape[0])
+        image = cv2.resize(image, target_shape)
 
-    # Optional: Segmented mask may interfere with border detection
-    # Overlay binary mask on top of RGB legion image
+    # Expand binary mask to 3 channels
     binary_mask = mask > 0.5
-    image = image * binary_mask
+    binary_mask_3c = np.repeat(binary_mask[:, :, np.newaxis], 3, axis=2)
+
+    # Apply mask to image
+    image = image * binary_mask_3c
 
     # Set legion image to grayscale
     grayimage = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -105,8 +108,8 @@ if __name__ == '__main__':
 
     # Testing image
     # Opencv reads image in BGR -> must convert to RGB  
-    img = cv2.imread(r"D:\School\Classes\CMPT419\project\Skin Lesion Sample Set-20250410T015009Z-001\Skin Lesion Sample Set\ISIC_0024306.jpg")[:,:,::-1]
-    mask = cv2.imread(r"D:\School\Classes\CMPT419\project\Skin Lesion Sample Set-20250410T015009Z-001\Skin Lesion Sample Set\ISIC_0024306_segmentation.png")[:,:,::-1]
+    # img = cv2.imread(r"D:\School\Classes\CMPT419\project\Skin Lesion Sample Set-20250410T015009Z-001\Skin Lesion Sample Set\ISIC_0024306.jpg")[:,:,::-1]
+    # mask = cv2.imread(r"D:\School\Classes\CMPT419\project\Skin Lesion Sample Set-20250410T015009Z-001\Skin Lesion Sample Set\ISIC_0024306_segmentation.png")[:,:,::-1]
 
     # Placeholder image 
     # img = np.random.randint(0, 255, (256, 256, 3), dtype=np.uint8)[:,:,::-1]
