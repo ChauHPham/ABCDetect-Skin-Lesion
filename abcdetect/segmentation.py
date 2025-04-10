@@ -1,5 +1,6 @@
 import random
 from pathlib import Path
+from typing import Any
 
 import albumentations as A
 import cv2
@@ -13,8 +14,7 @@ from skimage.morphology import remove_small_objects
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
-from .stratification import (stratified_sampling,
-                             visualize_dx_column_as_histogram)
+from .stratification import stratified_sampling, visualize_dx_column_as_histogram
 
 
 class LesionDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
@@ -75,7 +75,7 @@ def show_batch_samples(
         num_samples: Number of samples to visualize, should be less than or equal to the batch size.
     """
     print("Visualizing batch samples...\n")
-    images, masks = next(iter(loader))  # grab a batch from the loader
+    images, masks = next(iter(loader))
     images = images[:num_samples]
     masks = masks[:num_samples]
     num_samples = min(num_samples, len(images))
@@ -208,6 +208,23 @@ class DiceBCELoss(nn.Module):
         return 0.5 * bce_loss + 0.5 * dice_loss
 
 
+def apply_morphology(image: np.ndarray, **kwargs: Any) -> np.ndarray:
+    """Apply morphological operations to an image.
+
+    Args:
+        image: Input image array.
+        **kwargs: Additional keyword arguments.
+
+    Returns:
+        Processed image array.
+    """
+    return cv2.morphologyEx(
+        image,
+        cv2.MORPH_OPEN,  # Use opening operation to remove noise while preserving structure
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)),
+    )
+
+
 def get_training_transform(image_height: int = 192, image_width: int = 256) -> A.Compose:
     """Defines the training transformations for the dataset.
 
@@ -221,17 +238,13 @@ def get_training_transform(image_height: int = 192, image_width: int = 256) -> A
     return A.Compose(
         [
             A.Resize(image_height, image_width),
-            # A.Lambda(image=lambda x: cv2.morphologyEx(
-            #     x,
-            #     cv2.MORPH_BLACKHAT,
-            #     cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-            # )),
+            A.Lambda(image=apply_morphology),
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
             A.Rotate(limit=30, p=0.5),
-            A.RandomBrightnessContrast(p=0.2),
-            A.GaussianBlur(blur_limit=3, p=0.1),
-            A.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1, p=0.3),
+            A.RandomBrightnessContrast(p=0.15),
+            A.GaussianBlur(blur_limit=1, p=0.1),
+            A.ColorJitter(brightness=0.15, contrast=0.15, saturation=0.15, hue=0.1, p=0.3),
             A.Normalize(mean=(0.0, 0.0, 0.0), std=(1.0, 1.0, 1.0), max_pixel_value=255.0),
             A.ToTensorV2(),
         ]
@@ -253,6 +266,7 @@ def get_evaluation_transform(image_height: int = 192, image_width: int = 256) ->
     return A.Compose(
         [
             A.Resize(image_height, image_width),
+            A.Lambda(image=apply_morphology),
             A.Normalize(mean=(0.0, 0.0, 0.0), std=(1.0, 1.0, 1.0), max_pixel_value=255.0),
             A.ToTensorV2(),
         ]
@@ -432,13 +446,18 @@ def train_segmentation_model(
     )
 
     if show_graph:
-        show_batch_samples(train_loader)
+        preview_loader = DataLoader(
+            dataset=training_data,
+            batch_size=batch_size,
+            shuffle=True,
+        )
+        show_batch_samples(preview_loader)
 
     # Initialize model instance
     model = UNET(in_channels=3, out_channels=1).to(device)
 
     learning_rate = 1e-4  # Initial learning rate
-    max_epochs = 40
+    max_epochs = 100
 
     loss_fn = DiceBCELoss().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-5)
@@ -449,7 +468,6 @@ def train_segmentation_model(
         mode="max",  # higher is better for dice score
         factor=0.5,  # Reduce LR by half when plateau is detected
         patience=3,  # Wait for 3 epochs of no improvement
-        verbose=True,
         min_lr=1e-6,  # Don't reduce LR below this value
     )
 
