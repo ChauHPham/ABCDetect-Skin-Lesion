@@ -1,8 +1,13 @@
 import os
-
 import cv2
 import numpy as np
-from skimage.util import view_as_windows
+import matplotlib.pyplot as plt
+from skimage.morphology import (erosion, dilation, closing, opening,
+                                remove_small_objects, disk)
+from skimage.color import rgb2gray
+from skimage.transform import resize
+from skimage.filters import threshold_otsu
+
 
 
 def calculate_dermoscopic_structure_score(image: np.ndarray, mask: np.ndarray) -> int:
@@ -14,6 +19,7 @@ def calculate_dermoscopic_structure_score(image: np.ndarray, mask: np.ndarray) -
     Returns:
         Dermoscopic structure score (0 to 5) based on the presence of dots, globules, and structureless areas.
     """
+
     return compute_dermoscopic_score(image, mask)["D_score"]
 
 
@@ -24,49 +30,24 @@ def pixels_to_mm2(area_px):
 def mm2_to_pixels(area_mm2):
     return area_mm2 / 0.01
 
-
-def compute_dermoscopic_score(image: np.ndarray, mask: np.ndarray, save_vis_path: str = None) -> dict:
-    """Compute dermoscopic structure score (Part D of ABCD rule).
-
-    Visualizes detected dots, globules, and structureless areas if save_vis_path is provided.
-
-    Args:
-        image: RGB image of the lesion as a NumPy array.
-        mask: Binary mask (same size as image) delineating the lesion.
-        save_vis_path: Path to save visualization image (if provided).
-
-    Returns:
-        Dictionary containing:
-            - dots: Boolean indicating presence of dots.
-            - globules: Boolean indicating presence of globules.
-            - D_score: Dermoscopic structure score.
-            - pigment_network: Boolean indicating presence of pigment network (not implemented).
-            - streaks: Boolean indicating presence of streaks (not implemented).
-            - structureless_areas: Boolean indicating presence of structureless areas.
-    """
+def detect_dots_and_globules(gray_img, mask, image, save_vis_path=None):
+    """Detect dots and globules based on contour area."""
     lesion = cv2.bitwise_and(image, image, mask=mask)
-    gray = cv2.cvtColor(lesion, cv2.COLOR_BGR2GRAY)
-
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    blurred = cv2.GaussianBlur(gray_img, (5, 5), 0)
     _, thresh = cv2.threshold(blurred, 80, 255, cv2.THRESH_BINARY_INV)
 
     contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     print(f"Total contours found: {len(contours)}")
 
-    dots = 0
-    globules = 0
+    dots, globules = 0, 0
     vis_img = image.copy()
-    structureless_overlay = np.zeros_like(image)
 
     for cnt in contours:
         area = cv2.contourArea(cnt)
-        print(f"Contour area: {area:.2f}")
         (x, y), radius = cv2.minEnclosingCircle(cnt)
         center = (int(x), int(y))
         radius = int(radius)
 
-        # Dot: 10–50 px² ≈ 0.1–0.5 mm²
-        # Globule: 50–200 px² ≈ 0.5–2.0 mm²
         if mm2_to_pixels(0.1) <= area < mm2_to_pixels(0.5):
             dots += 1
             if save_vis_path:
@@ -76,35 +57,118 @@ def compute_dermoscopic_score(image: np.ndarray, mask: np.ndarray, save_vis_path
             if save_vis_path:
                 cv2.circle(vis_img, center, radius, (0, 0, 255), 2)  # Red for globules
 
-    has_dots = dots > 0
-    has_globules = globules > 0
+    return dots > 0, globules > 0, vis_img
 
-    # Structureless detection via local variance
-    masked_gray = cv2.bitwise_and(gray, gray, mask=mask)
-    window_size = 9
-    windows = view_as_windows(masked_gray, (window_size, window_size))
-    variances = np.var(windows, axis=(2, 3))
+def detect_structureless_areas(gray_img, mask, vis_img=None, save_vis_path=None, window_size=9, var_threshold=15, area_thresh=0.20):
+    """
+    Criteria:
+        - Occupies at least 10% of the total lesion area
+        - Can be hypo-, hyper-, or normally pigmented
+        - Lacks other discernible structures (e.g., dots, globules, networks, streaks)
 
-    low_var_map = variances < 15
-    percent_low_var = np.sum(low_var_map) / low_var_map.size
-    has_structureless = bool(percent_low_var > 0.20)
+    Detection Algorithm:
+        1. Convert image to grayscale to reduce color distractions.
+        2. Apply morphological closing (dilation followed by erosion) to fill in small texture gaps.
+           This suppresses small structures like dots, globules, and network patterns.
+        3. Compute the difference between the closed image and the inverted original image.
+           This emphasizes regions that remain uniform after closing — likely to be structureless.
+        4. Apply Otsu thresholding within the lesion mask to binarize the difference image:
+               - Otsu's method automatically finds the intensity threshold that best separates two classes
+                 (in this case, uniform vs non-uniform regions, IE minimum intra class variance).
+               - This results in a binary mask of likely structureless regions.
+        5. Remove small noisy detections using morphological opening and `remove_small_objects`.
+        6. Erode the lesion mask to create an "inner region" and exclude border-adjacent areas that might include skin or edge artifacts.
+        7. Keep only structureless regions that are fully within the eroded lesion area.
+        8. Return the binary mask or indicator of whether structureless regions are present.
+    """
 
-    print(f"Structureless area %: {percent_low_var:.2f}")
+    binary_mask = mask > 0.5
+    masked_image = gray_img * binary_mask
 
-    # Smooth and visualize structureless regions as semi-transparent yellow overlay
-    if save_vis_path:
-        stride = 1
-        for i in range(low_var_map.shape[0]):
-            for j in range(low_var_map.shape[1]):
-                if low_var_map[i, j]:
-                    top_left = (j, i)
-                    bottom_right = (j + window_size, i + window_size)
-                    cv2.rectangle(structureless_overlay, top_left, bottom_right, (0, 255, 255), -1)  # filled yellow
-        vis_img = cv2.addWeighted(vis_img, 1.0, structureless_overlay, 0.3, 0)
+    # Structural element for the upcoming morphological operations
+    selem = disk(3)
 
+    # Smooth the image by filling in small gaps, such as globules and networks
+    closed_image = closing(masked_image, selem)
+    
+    # Subtract the complement of the masked_image from the closed image to emphasize differences
+    # Change from dark to light will go to 0, light areas with little variation will remain the same
+    diff_image = np.clip(closed_image.astype(int) - (255 - masked_image.astype(int)), 0, 255)
+
+    # Apply Otsu thresholding on the difference image (only within lesion mask)
+    otsu_thresh = threshold_otsu(diff_image[binary_mask])
+    structureless_mask = (diff_image > otsu_thresh) & binary_mask
+
+    # First, use morphological opening to remove noise, then remove small objects
+    # structureless_mask_improved = opening(structureless_mask, selem)
+
+    # Due to mask leakage, part of the skin interferes with the results of the structureless area test
+    # Erode the lesion mask to create an inner region. The erosion radius can be tuned.
+    border_margin = 15  # tuning parameter: number of pixels to erode from the border
+    inner_lesion_mask = erosion(mask, disk(border_margin))
+
+    border_removed_mask = closing(structureless_mask & inner_lesion_mask, selem)
+
+    cleaned_mask = remove_small_objects(border_removed_mask.astype(bool))
+
+    # Retain only those structureless regions that are fully contained within the inner lesion region.
+    # structureless_mask_final = remove_small_objects(remove_small_objects(structureless_mask_improved & inner_lesion_mask, min_size=60))
+
+    fig, axes = plt.subplots(1, 6, figsize=(18, 4))
+    axes[0].imshow(gray_img, cmap='gray')
+    axes[0].set_title("Gray Image")
+    axes[0].axis('off')
+
+    axes[1].imshow(masked_image, cmap='gray')
+    axes[1].set_title("Closed Image")
+    axes[1].axis('off')
+
+    axes[2].imshow(closed_image, cmap='gray')
+    axes[2].set_title("Difference Image")
+    axes[2].axis('off')
+
+    axes[3].imshow(diff_image, cmap='gray')
+    axes[3].set_title("Otsu Threshold Image")
+    axes[3].axis('off')
+
+    axes[4].imshow(border_removed_mask, cmap='gray')
+    axes[4].set_title("Post Noise Removal")
+    axes[4].axis('off')
+
+    axes[5].imshow(cleaned_mask, cmap='gray')
+    axes[5].set_title("Final: Inner Region Only")
+    axes[5].axis('off')
+
+    plt.tight_layout()
+    plt.show()
+
+    # Check if the structureless area takes up 10% of the mask
+    total_lesion_pixels = np.sum(binary_mask.astype(bool))
+    total_unstructured_area = np.sum(cleaned_mask.astype(bool))
+
+    return bool(total_unstructured_area / total_lesion_pixels > 0.10), cleaned_mask.astype(np.uint8)
+
+def detect_pigment_networks():
+    return False, None
+
+def compute_dermoscopic_score(image: np.ndarray, mask: np.ndarray, save_vis_path: str = None) -> dict:
+    """Compute dermoscopic structure score (Part D of ABCD rule)."""
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # Ensure that the mask and the image have the same size
+    target_shape = (mask.shape[1], mask.shape[0])  # width, height
+    image = cv2.resize(image, target_shape)
+    gray = cv2.resize(gray, target_shape)
+
+    # --- Feature Detection ---
+    has_dots, has_globules, vis_img = detect_dots_and_globules(gray, mask, image, save_vis_path)
+    has_structureless, vis_img = detect_structureless_areas(gray, mask, vis_img, save_vis_path)
+
+    # Not implemented yet
     has_pigment_network = None
     has_streaks = None
 
+    # Final scoring (0.5 points per feature present)
     present_features = sum([
         int(has_dots),
         int(has_globules),
@@ -113,18 +177,19 @@ def compute_dermoscopic_score(image: np.ndarray, mask: np.ndarray, save_vis_path
         int(has_structureless)
     ])
 
+    # Save visualization if requested
     if save_vis_path:
         os.makedirs(os.path.dirname(save_vis_path), exist_ok=True)
         cv2.imwrite(save_vis_path, vis_img)
-        print(f"Saved blob + structureless visualization to {save_vis_path}")
+        print(f"Saved visualization to {save_vis_path}")
 
     return {
         "dots": has_dots,
         "globules": has_globules,
-        "D_score": present_features,
+        "structureless_areas": has_structureless,
         "pigment_network": has_pigment_network,
         "streaks": has_streaks,
-        "structureless_areas": has_structureless
+        "D_score": present_features
     }
 
 

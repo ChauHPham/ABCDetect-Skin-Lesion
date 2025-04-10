@@ -4,3 +4,8 @@ Worked on loading the data from kaggle
 
 Segmentation Model
 - Using the UNet architecture
+
+- Used for part D
+Dermatological Expert System Implementing the ABCD Rule of Dermoscopy
+for Skin Disease Identification
+
