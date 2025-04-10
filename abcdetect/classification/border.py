@@ -19,21 +19,21 @@ def calculate_border_score(image: np.ndarray, mask: np.ndarray, *, show_graph: b
     Returns:
         Border score (0 to 8) based on the presence of distinct edges.
     """
+
+    # Check that image and mask have the same size (height and width)
+    target_shape = (mask.shape[1], mask.shape[0])
+    image = cv2.resize(image, target_shape)
+
     # Optional: Segmented mask may interfere with border detection
     # Overlay binary mask on top of RGB legion image
-    image = cv2.bitwise_and(image,mask)
-    
-    # Visualize image with mask on 
-    cv2.imshow("AND", image)
+    binary_mask = mask > 0.5
+    image = image * binary_mask
 
     # Set legion image to grayscale
     grayimage = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
     # Set lesion image as 8 bit
     newimage = grayimage.astype(np.uint8)
-
-    # Greyscale image of segmented legion
-    cv2.imshow("AND", newimage)
 
     # Slice image into 8 segments to evaluate border score for each 
     # Height and width are floats 
@@ -51,13 +51,20 @@ def calculate_border_score(image: np.ndarray, mask: np.ndarray, *, show_graph: b
         # Add up the score of each segment for total border score 
         border_score += segment_score
     
+    # Visualization of the border detection procedure 
     if show_graph:
-            # Visualize the whole image after canny edge detection
             # Adjust thresholds to be the same values as the segment edge detection function
             low_threshold = 70
             high_threshold = 100 
             cannyedges = cv2.Canny(newimage, low_threshold, high_threshold)
-            plt.imshow(cannyedges, cmap = 'gray')
+            # Plot images all on the same graph 
+            fig, axes = plt.subplots(1, 3, figsize=(18, 4))
+            axes[0].imshow(image)
+            axes[0].axis('off')
+            axes[1].imshow(grayimage, cmap='gray')
+            axes[1].axis('off')
+            axes[2].imshow(cannyedges, cmap='gray')
+            axes[2].axis('off')
             plt.show()
          
     return border_score
@@ -96,13 +103,14 @@ def rgb2gray (image):
 if __name__ == '__main__':
     import sys
 
-    # Testing image 
-    img = cv2.imread(r"D:\School\Classes\CMPT419\project\Skin Lesion Sample Set-20250410T015009Z-001\Skin Lesion Sample Set\ISIC_0024306.jpg")
-    mask = cv2.imread(r"D:\School\Classes\CMPT419\project\Skin Lesion Sample Set-20250410T015009Z-001\Skin Lesion Sample Set\ISIC_0024306_segmentation.png")
+    # Testing image
+    # Opencv reads image in BGR -> must convert to RGB  
+    img = cv2.imread(r"D:\School\Classes\CMPT419\project\Skin Lesion Sample Set-20250410T015009Z-001\Skin Lesion Sample Set\ISIC_0024306.jpg")[:,:,::-1]
+    mask = cv2.imread(r"D:\School\Classes\CMPT419\project\Skin Lesion Sample Set-20250410T015009Z-001\Skin Lesion Sample Set\ISIC_0024306_segmentation.png")[:,:,::-1]
 
     # Placeholder image 
-    # img = np.random.randint(0, 255, (256, 256, 3), dtype=np.uint8)
-    # mask = np.zeros((256, 256), dtype=np.uint8)
+    # img = np.random.randint(0, 255, (256, 256, 3), dtype=np.uint8)[:,:,::-1]
+    # mask = np.zeros((256, 256), dtype=np.uint8)[:,:,::-1]
 
     # Calculate color score.
     score = calculate_border_score(img, mask, show_graph=True)
