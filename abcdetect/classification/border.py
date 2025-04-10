@@ -30,10 +30,10 @@ def calculate_border_score(image: np.ndarray, mask: np.ndarray, *, show_graph: b
     binary_mask_3c = np.repeat(binary_mask[:, :, np.newaxis], 3, axis=2)
 
     # Apply mask to image
-    image = image * binary_mask_3c
+    image = image * binary_mask_3c 
 
     # Set legion image to grayscale
-    grayimage = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    grayimage = cv2.cvtColor(maskedimage, cv2.COLOR_BGR2GRAY)
 
     # Set lesion image as 8 bit
     newimage = grayimage.astype(np.uint8)
@@ -59,15 +59,23 @@ def calculate_border_score(image: np.ndarray, mask: np.ndarray, *, show_graph: b
             # Adjust thresholds to be the same values as the segment edge detection function
             low_threshold = 70
             high_threshold = 100 
-            cannyedges = cv2.Canny(newimage, low_threshold, high_threshold)
-            # Plot images all on the same graph 
-            fig, axes = plt.subplots(1, 3, figsize=(18, 4))
+            cannyedges = cv2.Canny(newimage, low_threshold, high_threshold, 1, L2gradient= True)
+            # Plot images all on the same graph with titles
+            fig, axes = plt.subplots(1, 4, figsize=(12, 4), dpi = 80)
             axes[0].imshow(image)
+            axes[0].set_title('Original Image', fontsize= 'x-large')
             axes[0].axis('off')
-            axes[1].imshow(grayimage, cmap='gray')
+            axes[1].imshow(maskedimage)
+            axes[1].set_title('Mask Overlay Image', fontsize= 'x-large')
             axes[1].axis('off')
-            axes[2].imshow(cannyedges, cmap='gray')
+            axes[2].imshow(grayimage, cmap='gray')
+            axes[2].set_title('Grayscale Image', fontsize= 'x-large')
             axes[2].axis('off')
+            axes[3].imshow(cannyedges, cmap='gray')
+            axes[3].set_title('Canny Edge Detection', fontsize= 'x-large')
+            axes[3].axis('off')
+            fig.text(0.5, 0.1, 'Border Score: {}'.format(border_score), fontsize= 'x-large', horizontalalignment='center', wrap=True ) 
+            plt.tight_layout()
             plt.show()
          
     return border_score
@@ -108,8 +116,8 @@ if __name__ == '__main__':
 
     # Testing image
     # Opencv reads image in BGR -> must convert to RGB  
-    # img = cv2.imread(r"D:\School\Classes\CMPT419\project\Skin Lesion Sample Set-20250410T015009Z-001\Skin Lesion Sample Set\ISIC_0024306.jpg")[:,:,::-1]
-    # mask = cv2.imread(r"D:\School\Classes\CMPT419\project\Skin Lesion Sample Set-20250410T015009Z-001\Skin Lesion Sample Set\ISIC_0024306_segmentation.png")[:,:,::-1]
+    img = cv2.imread(r"D:\School\Classes\CMPT419\project\Skin Lesion Sample Set-20250410T015009Z-001\Skin Lesion Sample Set\ISIC_0024306.jpg")[:,:,::-1]
+    mask = cv2.imread(r"D:\School\Classes\CMPT419\project\Skin Lesion Sample Set-20250410T015009Z-001\Skin Lesion Sample Set\ISIC_0024306_segmentation.png")[:,:,::-1]
 
     # Placeholder image 
     # img = np.random.randint(0, 255, (256, 256, 3), dtype=np.uint8)[:,:,::-1]
