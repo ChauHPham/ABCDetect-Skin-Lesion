@@ -1,13 +1,23 @@
 # SFU CMPT 419 Project -- ABCDetect
 **ABCDetect**: Automated Boundary Classification and Detection for Skin Lesions
 
-ABCDetect is a tool for skin lesion segmentation and classification using deep learning. It helps identify potential melanoma boundaries from dermoscopic images.
+ABCDetect is a tool for skin lesion segmentation and classification using deep learning. It helps identify potential melanoma boundaries from dermoscopic images and performs automated ABCD rule analysis to assist in diagnosis.
 
 ## Important Links
 
 | [Timesheet](https://1sfu-my.sharepoint.com/:x:/g/personal/hamarneh_sfu_ca/EUcDkxJpdj5BhtqdgrlkBs8Bq7pB34Q2yUVFNF01W31fOQ?e=AL5Zei) | [Slack channel](https://cmpt419spring2025.slack.com/archives/C086CRM81JN) | [Project report](https://www.overleaf.com/4797734754qgyqrkymdzng#014097) |
 |-----------|---------------|-------------------------|
 
+## Background
+
+The ABCD rule is a clinical algorithm used by dermatologists to evaluate suspicious skin lesions and detect potential melanomas. Each letter represents a feature to be analyzed:
+
+- **A**: Asymmetry - Lesions are evaluated for differences in color, structure, and contour across perpendicular axes.
+- **B**: Border irregularity - The lesion's border is assessed for abrupt or indistinct pigment patterns.
+- **C**: Color variation - The presence of specific colors (e.g., white, red, brown, blue-gray, black) is analyzed.
+- **D**: Dermoscopic structures - Key structural features such as pigment networks, dots, and globules are identified.
+
+ABCDetect automates this analysis by first segmenting the lesion and then quantifying each ABCD feature to calculate a Total Dermoscopic Score (TDS), which can help classify the lesion as benign, suspicious, or likely malignant.
 
 ## Video/demo/GIF
 [Add your project demo video or GIF here - 1:40 to 2 minutes maximum]
@@ -34,11 +44,23 @@ Run a complete demonstration of the project with dataset download, model trainin
 python -m abcdetect demo
 ```
 
-To segment a single skin lesion image using a pre-trained model:
+To analyze a single skin lesion image using a pre-trained model and visualize the ABCD analysis:
 
 ```bash
-python -m abcdetect segment --image /path/to/your/image.jpg
+python -m abcdetect analyze --image /path/to/your/image.jpg --show-graph
 ```
+
+For segmentation only without ABCD analysis:
+
+```bash
+python -m abcdetect segment --image /path/to/your/image.jpg --show-graph
+```
+
+The `--show-graph` option displays visualization of each step in the ABCD analysis, including:
+- Asymmetry axis detection and measurement
+- Border irregularity assessment
+- Color distribution analysis
+- Dermoscopic structure identification
 
 ### What to find where
 
@@ -48,7 +70,13 @@ repository
 │   ├── __main__.py              ## Entry point with CLI implementation
 │   ├── download_dataset.py      ## Dataset download functionality
 │   ├── segmentation.py          ## Segmentation model training and inference
-│   └── ...                      ## Additional modules
+│   ├── classification/
+│   │   ├── asymmetry.py         ## Asymmetry detection algorithms
+│   │   ├── border.py            ## Border irregularity assessment
+│   │   ├── colour.py            ## Color variation detection
+│   │   ├── dermoscopy.py        ## Dermoscopic structure analysis
+│   │   └── ...
+│   └── ...
 ├── docs/                        ## Documentation of the project and the libraries used  
 ├── README.md                    ## You are here
 ├── requirements.txt             ## Dependencies of the project
@@ -73,7 +101,7 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-Install PyTorch with the appropriate version for your system:
+You will also need to install PyTorch with the appropriate version for your system:
 
 ```bash
 # For CUDA support (if you have a compatible NVIDIA GPU)
@@ -95,13 +123,13 @@ To reproduce the results in our report, follow these steps:
 python -m abcdetect download
 
 # 2. Train the segmentation model (adjust batch size based on your GPU memory)
-python -m abcdetect train --batch-size 32 --device cuda
+python -m abcdetect train --batch-size 48 --device cuda
 
-# 3. Evaluate the model on the test set
+# 3. Evaluate the model on the test set (optional)
 python -m abcdetect demo
 
-# 4. To segment a specific image using the trained model
-python -m abcdetect segment --image path/to/test_image.jpg
+# 4. To analyze a specific image using the trained model with visualization
+python -m abcdetect analyze --image path/to/test_image.jpg --show-graph
 ```
 
 The downloaded dataset will be stored in the `datasets` directory by default.
@@ -115,14 +143,14 @@ If you prefer to skip the training process, you can use our pre-trained model av
 
 1. Visit [our Hugging Face repository](https://huggingface.co/ColwynAIWiz/LesionSegmentation/tree/main)
 2. Download the latest `.pt` model file (the one with the most recent timestamp)
-3. Use the model for segmentation:
+3. Use the model for ABCD analysis:
 
 ```bash
 # Specify the model path directly
-python -m abcdetect segment --model path/to/downloaded/model.pt --image path/to/your/image.jpg
+python -m abcdetect analyze --model path/to/downloaded/model.pt --image path/to/your/image.jpg --show-graph
 
 # OR place the model in your output directory and it will be used automatically
-python -m abcdetect segment --image path/to/your/image.jpg
+python -m abcdetect analyze --image path/to/your/image.jpg --show-graph
 ```
 
 <a name="guide"></a>
@@ -138,6 +166,7 @@ Available modes:
 - `download`: Download the HAM10K dataset only
 - `train`: Train the segmentation model
 - `segment`: Segment a specific image using a trained model
+- `analyze`: Perform ABCD analysis on a specific image
 - `demo`: Run the full pipeline (download, train, evaluate)
 
 Common options:
@@ -150,8 +179,8 @@ Mode-specific options:
 - Download mode: `--force`, `-f`: Force re-download even if data exists
 - Train mode: `--batch-size`, `-k`: Batch size for training (default: 32)
 - Train mode: `--num-workers`, `-n`: Number of data loader workers
-- Segment mode: `--image`, `-i`: Path to the image to segment
-- Segment mode: `--model`, `-m`: Path to the model file (optional)
+- Segment/Analyze mode: `--image`, `-i`: Path to the image to process
+- Segment/Analyze mode: `--model`, `-m`: Path to the model file (optional)
 
 Example commands:
 ```bash
@@ -164,8 +193,8 @@ python -m abcdetect train --batch-size 64 --num-workers 4 --device cuda
 # Segment an image
 python -m abcdetect segment --image test_images/lesion.jpg
 
-# Segment an image using a downloaded pre-trained model
-python -m abcdetect segment --image test_images/lesion.jpg --model pretrained_models/segmentation_model.pt
+# Analyze an image with ABCD rule and visualization
+python -m abcdetect analyze --image test_images/lesion.jpg --show-graph
 
 # Run full demo with custom directories
 python -m abcdetect demo --datasets-dir ./my_datasets --output-dir ./results
