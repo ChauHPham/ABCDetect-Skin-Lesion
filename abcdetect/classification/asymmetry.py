@@ -38,8 +38,7 @@ def calculate_asymmetry_score(image: np.ndarray, mask: np.ndarray, *, show_graph
     axis1 = eigenvectors[0]
     axis2 = eigenvectors[1]
 
-    if show_graph:
-        visualize_pca(image, mask, centroid, eigenvectors, eigenvalues)
+    # visualize_pca(image, mask, centroid, eigenvectors, eigenvalues)
 
     # Calculate asymmetry along each axis
     axis1_asymmetry = is_axis_asymmetric(image, mask, centroid, axis1, show_graph=show_graph)
@@ -85,8 +84,7 @@ def is_axis_asymmetric(
     """
     half1_mask, half2_mask = split_mask_by_axis(mask, centroid, axis_vector)
 
-    if show_graph:
-        visualize_mask_split(image, mask, half1_mask, half2_mask, centroid, axis_vector)
+    # visualize_mask_split(image, mask, half1_mask, half2_mask, centroid, axis_vector)
 
     # Calculate shape asymmetry
     shape_asymmetry = calculate_shape_asymmetry(
