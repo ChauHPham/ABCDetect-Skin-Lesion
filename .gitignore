@@ -3,6 +3,13 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+#Avoid including downloaded files
+dataset
+
+#Do not include pytorch models
+*.pth 
+*.pt
+
 # C extensions
 *.so
 

@@ -24,49 +24,24 @@ def pixels_to_mm2(area_px):
 def mm2_to_pixels(area_mm2):
     return area_mm2 / 0.01
 
-
-def compute_dermoscopic_score(image: np.ndarray, mask: np.ndarray, save_vis_path: str = None) -> dict:
-    """Compute dermoscopic structure score (Part D of ABCD rule).
-
-    Visualizes detected dots, globules, and structureless areas if save_vis_path is provided.
-
-    Args:
-        image: RGB image of the lesion as a NumPy array.
-        mask: Binary mask (same size as image) delineating the lesion.
-        save_vis_path: Path to save visualization image (if provided).
-
-    Returns:
-        Dictionary containing:
-            - dots: Boolean indicating presence of dots.
-            - globules: Boolean indicating presence of globules.
-            - D_score: Dermoscopic structure score.
-            - pigment_network: Boolean indicating presence of pigment network (not implemented).
-            - streaks: Boolean indicating presence of streaks (not implemented).
-            - structureless_areas: Boolean indicating presence of structureless areas.
-    """
+def detect_dots_and_globules(gray_img, mask, image, save_vis_path=None):
+    """Detect dots and globules based on contour area."""
     lesion = cv2.bitwise_and(image, image, mask=mask)
-    gray = cv2.cvtColor(lesion, cv2.COLOR_BGR2GRAY)
-
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    blurred = cv2.GaussianBlur(gray_img, (5, 5), 0)
     _, thresh = cv2.threshold(blurred, 80, 255, cv2.THRESH_BINARY_INV)
 
     contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     print(f"Total contours found: {len(contours)}")
 
-    dots = 0
-    globules = 0
+    dots, globules = 0, 0
     vis_img = image.copy()
-    structureless_overlay = np.zeros_like(image)
 
     for cnt in contours:
         area = cv2.contourArea(cnt)
-        print(f"Contour area: {area:.2f}")
         (x, y), radius = cv2.minEnclosingCircle(cnt)
         center = (int(x), int(y))
         radius = int(radius)
 
-        # Dot: 10–50 px² ≈ 0.1–0.5 mm²
-        # Globule: 50–200 px² ≈ 0.5–2.0 mm²
         if mm2_to_pixels(0.1) <= area < mm2_to_pixels(0.5):
             dots += 1
             if save_vis_path:
@@ -76,35 +51,45 @@ def compute_dermoscopic_score(image: np.ndarray, mask: np.ndarray, save_vis_path
             if save_vis_path:
                 cv2.circle(vis_img, center, radius, (0, 0, 255), 2)  # Red for globules
 
-    has_dots = dots > 0
-    has_globules = globules > 0
+    return dots > 0, globules > 0, vis_img
 
-    # Structureless detection via local variance
-    masked_gray = cv2.bitwise_and(gray, gray, mask=mask)
-    window_size = 9
+def detect_structureless_areas(gray_img, mask, vis_img=None, save_vis_path=None, window_size=9, var_threshold=15, area_thresh=0.20):
+    """Detect structureless regions using local variance."""
+    masked_gray = cv2.bitwise_and(gray_img, gray_img, mask=mask)
     windows = view_as_windows(masked_gray, (window_size, window_size))
     variances = np.var(windows, axis=(2, 3))
 
-    low_var_map = variances < 15
+    low_var_map = variances < var_threshold
     percent_low_var = np.sum(low_var_map) / low_var_map.size
-    has_structureless = bool(percent_low_var > 0.20)
+    has_structureless = percent_low_var > area_thresh
 
     print(f"Structureless area %: {percent_low_var:.2f}")
 
-    # Smooth and visualize structureless regions as semi-transparent yellow overlay
-    if save_vis_path:
-        stride = 1
+    if save_vis_path and vis_img is not None:
+        overlay = np.zeros_like(vis_img)
         for i in range(low_var_map.shape[0]):
             for j in range(low_var_map.shape[1]):
                 if low_var_map[i, j]:
                     top_left = (j, i)
                     bottom_right = (j + window_size, i + window_size)
-                    cv2.rectangle(structureless_overlay, top_left, bottom_right, (0, 255, 255), -1)  # filled yellow
-        vis_img = cv2.addWeighted(vis_img, 1.0, structureless_overlay, 0.3, 0)
+                    cv2.rectangle(overlay, top_left, bottom_right, (0, 255, 255), -1)
+        vis_img = cv2.addWeighted(vis_img, 1.0, overlay, 0.3, 0)
 
+    return has_structureless, vis_img
+
+def compute_dermoscopic_score(image: np.ndarray, mask: np.ndarray, save_vis_path: str = None) -> dict:
+    """Compute dermoscopic structure score (Part D of ABCD rule)."""
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # --- Feature Detection ---
+    has_dots, has_globules, vis_img = detect_dots_and_globules(gray, mask, image, save_vis_path)
+    has_structureless, vis_img = detect_structureless_areas(gray, mask, vis_img, save_vis_path)
+
+    # Not implemented yet
     has_pigment_network = None
     has_streaks = None
 
+    # Final scoring (0.5 points per feature present)
     present_features = sum([
         int(has_dots),
         int(has_globules),
@@ -113,18 +98,19 @@ def compute_dermoscopic_score(image: np.ndarray, mask: np.ndarray, save_vis_path
         int(has_structureless)
     ])
 
+    # Save visualization if requested
     if save_vis_path:
         os.makedirs(os.path.dirname(save_vis_path), exist_ok=True)
         cv2.imwrite(save_vis_path, vis_img)
-        print(f"Saved blob + structureless visualization to {save_vis_path}")
+        print(f"Saved visualization to {save_vis_path}")
 
     return {
         "dots": has_dots,
         "globules": has_globules,
-        "D_score": present_features,
+        "structureless_areas": has_structureless,
         "pigment_network": has_pigment_network,
         "streaks": has_streaks,
-        "structureless_areas": has_structureless
+        "D_score": present_features
     }
 
 
