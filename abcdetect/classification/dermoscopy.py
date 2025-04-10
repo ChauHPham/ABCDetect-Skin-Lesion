@@ -1,8 +1,13 @@
 import os
-
 import cv2
 import numpy as np
-from skimage.util import view_as_windows
+import matplotlib.pyplot as plt
+from skimage.morphology import (erosion, dilation, closing, opening,
+                                remove_small_objects, disk)
+from skimage.color import rgb2gray
+from skimage.transform import resize
+from skimage.filters import threshold_otsu
+
 
 
 def calculate_dermoscopic_structure_score(image: np.ndarray, mask: np.ndarray) -> int:
@@ -14,6 +19,7 @@ def calculate_dermoscopic_structure_score(image: np.ndarray, mask: np.ndarray) -
     Returns:
         Dermoscopic structure score (0 to 5) based on the presence of dots, globules, and structureless areas.
     """
+
     return compute_dermoscopic_score(image, mask)["D_score"]
 
 
@@ -54,32 +60,70 @@ def detect_dots_and_globules(gray_img, mask, image, save_vis_path=None):
     return dots > 0, globules > 0, vis_img
 
 def detect_structureless_areas(gray_img, mask, vis_img=None, save_vis_path=None, window_size=9, var_threshold=15, area_thresh=0.20):
-    """Detect structureless regions using local variance."""
-    masked_gray = cv2.bitwise_and(gray_img, gray_img, mask=mask)
-    windows = view_as_windows(masked_gray, (window_size, window_size))
-    variances = np.var(windows, axis=(2, 3))
+    masked_image = gray_img * mask
 
-    low_var_map = variances < var_threshold
-    percent_low_var = np.sum(low_var_map) / low_var_map.size
-    has_structureless = percent_low_var > area_thresh
+    # Structural element for the upcoming morphological operations
+    selem = disk(3)
 
-    print(f"Structureless area %: {percent_low_var:.2f}")
+    # Smooth the image by filling in small gaps, such as globules and networks
+    closed_image = closing(masked_image, selem)
+    
+    # Subtract the complement of the masked_image from the closed image to emphasize differences
+    # Change from dark to light will go to 0, light areas with little variation will remain the same
+    diff_image = np.clip(closed_image.astype(int) - (255 - masked_image.astype(int)), 0, 255)
 
-    if save_vis_path and vis_img is not None:
-        overlay = np.zeros_like(vis_img)
-        for i in range(low_var_map.shape[0]):
-            for j in range(low_var_map.shape[1]):
-                if low_var_map[i, j]:
-                    top_left = (j, i)
-                    bottom_right = (j + window_size, i + window_size)
-                    cv2.rectangle(overlay, top_left, bottom_right, (0, 255, 255), -1)
-        vis_img = cv2.addWeighted(vis_img, 1.0, overlay, 0.3, 0)
+    # Apply Otsu thresholding on the difference image (only within lesion mask)
+    otsu_thresh = threshold_otsu(diff_image[mask])
+    structureless_mask = (diff_image > otsu_thresh) & mask
 
-    return has_structureless, vis_img
+    # First, use morphological opening to remove noise, then remove small objects
+    structureless_mask_improved = remove_small_objects(opening(structureless_mask, selem), min_size=20)
+
+    # Due to mask leakage, part of the skin interferes with the results of the structureless area test
+    # Erode the lesion mask to create an inner region. The erosion radius can be tuned.
+    border_margin = 15  # tuning parameter: number of pixels to erode from the border
+    inner_lesion_mask = erosion(mask, disk(border_margin))
+
+    # Retain only those structureless regions that are fully contained within the inner lesion region.
+    structureless_mask_final = structureless_mask_improved & inner_lesion_mask
+
+    fig, axes = plt.subplots(1, 6, figsize=(18, 4))
+    axes[0].imshow(gray_img, cmap='gray')
+    axes[0].set_title("Gray Image")
+    axes[0].axis('off')
+
+    axes[1].imshow(masked_image, cmap='gray')
+    axes[1].set_title("Closed Image")
+    axes[1].axis('off')
+
+    axes[2].imshow(closed_image, cmap='gray')
+    axes[2].set_title("Difference Image")
+    axes[2].axis('off')
+
+    axes[3].imshow(diff_image, cmap='gray')
+    axes[3].set_title("Otsu Threshold Image")
+    axes[3].axis('off')
+
+    axes[4].imshow(structureless_mask_improved, cmap='gray')
+    axes[4].set_title("Post Noise Removal")
+    axes[4].axis('off')
+
+    axes[5].imshow(structureless_mask_final, cmap='gray')
+    axes[5].set_title("Final: Inner Region Only")
+    axes[5].axis('off')
+    plt.tight_layout()
+    plt.show()
+
+    return False, gray_img
 
 def compute_dermoscopic_score(image: np.ndarray, mask: np.ndarray, save_vis_path: str = None) -> dict:
     """Compute dermoscopic structure score (Part D of ABCD rule)."""
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # Ensure that the mask and the image have the same size
+    target_shape = (mask.shape[1], mask.shape[0])  # width, height
+    image = cv2.resize(image, target_shape)
+    gray = cv2.resize(gray, target_shape)
 
     # --- Feature Detection ---
     has_dots, has_globules, vis_img = detect_dots_and_globules(gray, mask, image, save_vis_path)
