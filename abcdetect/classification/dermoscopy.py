@@ -60,7 +60,30 @@ def detect_dots_and_globules(gray_img, mask, image, save_vis_path=None):
     return dots > 0, globules > 0, vis_img
 
 def detect_structureless_areas(gray_img, mask, vis_img=None, save_vis_path=None, window_size=9, var_threshold=15, area_thresh=0.20):
-    masked_image = gray_img * mask
+    """
+    Criteria:
+        - Occupies at least 10% of the total lesion area
+        - Can be hypo-, hyper-, or normally pigmented
+        - Lacks other discernible structures (e.g., dots, globules, networks, streaks)
+
+    Detection Algorithm:
+        1. Convert image to grayscale to reduce color distractions.
+        2. Apply morphological closing (dilation followed by erosion) to fill in small texture gaps.
+           This suppresses small structures like dots, globules, and network patterns.
+        3. Compute the difference between the closed image and the inverted original image.
+           This emphasizes regions that remain uniform after closing — likely to be structureless.
+        4. Apply Otsu thresholding within the lesion mask to binarize the difference image:
+               - Otsu's method automatically finds the intensity threshold that best separates two classes
+                 (in this case, uniform vs non-uniform regions, IE minimum intra class variance).
+               - This results in a binary mask of likely structureless regions.
+        5. Remove small noisy detections using morphological opening and `remove_small_objects`.
+        6. Erode the lesion mask to create an "inner region" and exclude border-adjacent areas that might include skin or edge artifacts.
+        7. Keep only structureless regions that are fully within the eroded lesion area.
+        8. Return the binary mask or indicator of whether structureless regions are present.
+    """
+
+    binary_mask = mask > 0.5
+    masked_image = gray_img * binary_mask
 
     # Structural element for the upcoming morphological operations
     selem = disk(3)
@@ -73,19 +96,23 @@ def detect_structureless_areas(gray_img, mask, vis_img=None, save_vis_path=None,
     diff_image = np.clip(closed_image.astype(int) - (255 - masked_image.astype(int)), 0, 255)
 
     # Apply Otsu thresholding on the difference image (only within lesion mask)
-    otsu_thresh = threshold_otsu(diff_image[mask])
-    structureless_mask = (diff_image > otsu_thresh) & mask
+    otsu_thresh = threshold_otsu(diff_image[binary_mask])
+    structureless_mask = (diff_image > otsu_thresh) & binary_mask
 
     # First, use morphological opening to remove noise, then remove small objects
-    structureless_mask_improved = remove_small_objects(opening(structureless_mask, selem), min_size=20)
+    # structureless_mask_improved = opening(structureless_mask, selem)
 
     # Due to mask leakage, part of the skin interferes with the results of the structureless area test
     # Erode the lesion mask to create an inner region. The erosion radius can be tuned.
     border_margin = 15  # tuning parameter: number of pixels to erode from the border
     inner_lesion_mask = erosion(mask, disk(border_margin))
 
+    border_removed_mask = closing(structureless_mask & inner_lesion_mask, selem)
+
+    cleaned_mask = remove_small_objects(border_removed_mask.astype(bool))
+
     # Retain only those structureless regions that are fully contained within the inner lesion region.
-    structureless_mask_final = structureless_mask_improved & inner_lesion_mask
+    # structureless_mask_final = remove_small_objects(remove_small_objects(structureless_mask_improved & inner_lesion_mask, min_size=60))
 
     fig, axes = plt.subplots(1, 6, figsize=(18, 4))
     axes[0].imshow(gray_img, cmap='gray')
@@ -104,17 +131,25 @@ def detect_structureless_areas(gray_img, mask, vis_img=None, save_vis_path=None,
     axes[3].set_title("Otsu Threshold Image")
     axes[3].axis('off')
 
-    axes[4].imshow(structureless_mask_improved, cmap='gray')
+    axes[4].imshow(border_removed_mask, cmap='gray')
     axes[4].set_title("Post Noise Removal")
     axes[4].axis('off')
 
-    axes[5].imshow(structureless_mask_final, cmap='gray')
+    axes[5].imshow(cleaned_mask, cmap='gray')
     axes[5].set_title("Final: Inner Region Only")
     axes[5].axis('off')
+
     plt.tight_layout()
     plt.show()
 
-    return False, gray_img
+    # Check if the structureless area takes up 10% of the mask
+    total_lesion_pixels = np.sum(binary_mask.astype(bool))
+    total_unstructured_area = np.sum(cleaned_mask.astype(bool))
+
+    return bool(total_unstructured_area / total_lesion_pixels > 0.10), cleaned_mask.astype(np.uint8)
+
+def detect_pigment_networks():
+    return False, None
 
 def compute_dermoscopic_score(image: np.ndarray, mask: np.ndarray, save_vis_path: str = None) -> dict:
     """Compute dermoscopic structure score (Part D of ABCD rule)."""
