@@ -59,7 +59,7 @@ def detect_dots_and_globules(gray_img, mask, image, *, save_vis_path=None, show_
             if mm2_to_pixels(0.1) <= area < mm2_to_pixels(0.5):
                 dots += 1
                 cv2.circle(vis_img, (int(x + w / 2), int(y + h / 2)), int(max(w, h) / 2), (0, 255, 0), 2)  # Green
-            elif mm2_to_pixels(0.5) <= area < mm2_to_pixels(2.0):
+            elif mm2_to_pixels(0.5) <= area < mm2_to_pixels(2.5):
                 globules += 1
                 cv2.circle(vis_img, (int(x + w / 2), int(y + h / 2)), int(max(w, h) / 2), (0, 0, 255), 2)  # Red
 
@@ -79,8 +79,7 @@ def detect_dots_and_globules(gray_img, mask, image, *, save_vis_path=None, show_
         axes[2].axis('off')
 
         # Show overlay with blobs (after drawing)
-        vis_rgb = cv2.cvtColor(vis_img, cv2.COLOR_BGR2RGB)
-        axes[3].imshow(vis_rgb)
+        axes[3].imshow(vis_img)
         axes[3].set_title("Detected Dots/Globules")
         axes[3].axis('off')
 
