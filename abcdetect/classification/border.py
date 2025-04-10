@@ -30,10 +30,10 @@ def calculate_border_score(image: np.ndarray, mask: np.ndarray, *, show_graph: b
     binary_mask_3c = np.repeat(binary_mask[:, :, np.newaxis], 3, axis=2)
 
     # Apply mask to image
-    image = image * binary_mask_3c 
+    maskedimage = image * binary_mask_3c 
 
     # Set legion image to grayscale
-    grayimage = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    grayimage = cv2.cvtColor(maskedimage, cv2.COLOR_BGR2GRAY)
 
     # Set lesion image as 8 bit
     newimage = grayimage.astype(np.uint8)
