@@ -603,7 +603,7 @@ def evaluate_segmentation_model(
     fig, axes = plt.subplots(num_samples, 5, figsize=fig_size)
 
     test_model = UNET(in_channels=3, out_channels=1).to(device)
-    test_model.load_state_dict(torch.load(model_save_path))
+    test_model.load_state_dict(torch.load(model_save_path, map_location=device))
     test_model.eval()
 
     for i, image_path in enumerate(image_paths):

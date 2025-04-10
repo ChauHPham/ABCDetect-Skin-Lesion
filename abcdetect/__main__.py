@@ -204,6 +204,27 @@ def analyze_image(
     print(f"Results saved to {result_file}")
 
 
+def analyze_multiple_images(
+    image_paths: list[Path], model_path: Path, output_dir: Path, device: torch.device
+) -> None:
+    """Segment and analyze multiple images using ABCD criteria.
+    
+    Args:
+        image_paths: List of paths to the images to analyze.
+        model_path: Path to the trained segmentation model.
+        output_dir: Directory to save analysis results.
+        device: Device to use for segmentation (CPU or GPU).
+    """
+    print(f"\n===== Analyzing {len(image_paths)} images =====")
+    
+    for image_path in image_paths:
+        print(f"\nProcessing image: {image_path.name}")
+        try:
+            analyze_image(image_path, model_path, output_dir, device, show_graph=False)
+        except Exception as e:
+            print(f"Error analyzing {image_path.name}: {str(e)}")
+
+
 def main() -> None:
     """Main function that parses arguments and runs the appropriate operation."""
     parser = argparse.ArgumentParser(prog="abcdetect", description="Skin Lesion Detection and Segmentation Tool")
@@ -378,6 +399,18 @@ def main() -> None:
 
         # Evaluate the model
         evaluate_segmentation_model(ham10k_image_path, ham10k_masks_path, segmentation_model_path, device=device)
+        
+        # Analyze demo images
+        demo_dir = Path(__file__).parent.parent / "demo"
+        if demo_dir.exists() and demo_dir.is_dir():
+            demo_images = list(demo_dir.glob("*.jpg")) + list(demo_dir.glob("*.png"))
+            if demo_images:
+                print(f"\nFound {len(demo_images)} demo images to analyze")
+                analyze_multiple_images(demo_images, segmentation_model_path, output_dir, device)
+            else:
+                print(f"\nNo demo images found in {demo_dir}")
+        else:
+            print(f"\nDemo directory not found: {demo_dir}")
 
 
 if __name__ == "__main__":
