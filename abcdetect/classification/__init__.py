@@ -55,7 +55,7 @@ def analyze_abcd_features(
     asymmetry_score = calculate_asymmetry_score(image, mask, show_graph=show_graph)
     border_score = calculate_border_score(image, mask, show_graph=show_graph)
     colour_score = calculate_colour_score(image, mask, show_graph=show_graph)
-    dermoscopic_structure_score = calculate_dermoscopic_structure_score(image, mask)
+    dermoscopic_structure_score = calculate_dermoscopic_structure_score(image, mask, show_graph=show_graph)
 
     # Calculate TDS (Total Dermascopic Score)
     # TDS = (A × 1.3) + (B × 0.1) + (C × 0.5) + (D × 0.5)

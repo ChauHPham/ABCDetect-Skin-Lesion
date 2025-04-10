@@ -10,7 +10,7 @@ from skimage.filters import threshold_otsu
 
 
 
-def calculate_dermoscopic_structure_score(image: np.ndarray, mask: np.ndarray) -> int:
+def calculate_dermoscopic_structure_score(image: np.ndarray, mask: np.ndarray, save_vis_path: str = None, show_graph: bool = False) -> int:
     """Calculate dermoscopic structure score for the lesion according to ABCD rule.
     Args:
         image: RGB image of the lesion as a NumPy array.
@@ -20,7 +20,7 @@ def calculate_dermoscopic_structure_score(image: np.ndarray, mask: np.ndarray) -
         Dermoscopic structure score (0 to 5) based on the presence of dots, globules, and structureless areas.
     """
 
-    return compute_dermoscopic_score(image, mask)["D_score"]
+    return compute_dermoscopic_score(image, mask, show_graph=show_graph)["D_score"]
 
 
 # --- Area conversion utils (assuming ~0.1 mm/pixel) ---
@@ -30,7 +30,7 @@ def pixels_to_mm2(area_px):
 def mm2_to_pixels(area_mm2):
     return area_mm2 / 0.01
 
-def detect_dots_and_globules(gray_img, mask, image, save_vis_path=None):
+def detect_dots_and_globules(gray_img, mask, image, *, save_vis_path=None, show_graph=False):
     """Detect dots and globules based on contour area."""
     lesion = cv2.bitwise_and(image, image, mask=mask)
     blurred = cv2.GaussianBlur(gray_img, (5, 5), 0)
@@ -50,16 +50,38 @@ def detect_dots_and_globules(gray_img, mask, image, save_vis_path=None):
 
         if mm2_to_pixels(0.1) <= area < mm2_to_pixels(0.5):
             dots += 1
-            if save_vis_path:
-                cv2.circle(vis_img, center, radius, (0, 255, 0), 2)  # Green for dots
+            cv2.circle(vis_img, center, radius, (0, 255, 0), 2)  # Green for dots
         elif mm2_to_pixels(0.5) <= area < mm2_to_pixels(2.0):
             globules += 1
-            if save_vis_path:
-                cv2.circle(vis_img, center, radius, (0, 0, 255), 2)  # Red for globules
+            cv2.circle(vis_img, center, radius, (0, 0, 255), 2)  # Red for globules
+    if show_graph:
+        fig, axes = plt.subplots(1, 4, figsize=(16, 4))
+
+        axes[0].imshow(gray_img, cmap='gray')
+        axes[0].set_title("Grayscale Lesion")
+        axes[0].axis('off')
+
+        axes[1].imshow(mask, cmap='gray')
+        axes[1].set_title("Segmentation Mask")
+        axes[1].axis('off')
+
+        axes[2].imshow(thresh, cmap='gray')
+        axes[2].set_title("Thresholded (Binary)")
+        axes[2].axis('off')
+
+        # Show overlay with blobs (after drawing)
+        vis_rgb = cv2.cvtColor(vis_img, cv2.COLOR_BGR2RGB)
+        axes[3].imshow(vis_rgb)
+        axes[3].set_title("Detected Dots/Globules")
+        axes[3].axis('off')
+
+        plt.tight_layout()
+        plt.show()
+
 
     return dots > 0, globules > 0, vis_img
 
-def detect_structureless_areas(gray_img, mask, vis_img=None, save_vis_path=None, window_size=9, var_threshold=15, area_thresh=0.20):
+def detect_structureless_areas(gray_img, mask, vis_img=None,  *, save_vis_path=None, window_size=9, var_threshold=15, area_thresh=0.20,  show_graph=False):
     """
     Criteria:
         - Occupies at least 10% of the total lesion area
@@ -113,34 +135,34 @@ def detect_structureless_areas(gray_img, mask, vis_img=None, save_vis_path=None,
 
     # Retain only those structureless regions that are fully contained within the inner lesion region.
     # structureless_mask_final = remove_small_objects(remove_small_objects(structureless_mask_improved & inner_lesion_mask, min_size=60))
+    if show_graph:
+        fig, axes = plt.subplots(1, 6, figsize=(18, 4))
+        axes[0].imshow(gray_img, cmap='gray')
+        axes[0].set_title("Gray Image")
+        axes[0].axis('off')
 
-    fig, axes = plt.subplots(1, 6, figsize=(18, 4))
-    axes[0].imshow(gray_img, cmap='gray')
-    axes[0].set_title("Gray Image")
-    axes[0].axis('off')
+        axes[1].imshow(masked_image, cmap='gray')
+        axes[1].set_title("Closed Image")
+        axes[1].axis('off')
 
-    axes[1].imshow(masked_image, cmap='gray')
-    axes[1].set_title("Closed Image")
-    axes[1].axis('off')
+        axes[2].imshow(closed_image, cmap='gray')
+        axes[2].set_title("Difference Image")
+        axes[2].axis('off')
 
-    axes[2].imshow(closed_image, cmap='gray')
-    axes[2].set_title("Difference Image")
-    axes[2].axis('off')
+        axes[3].imshow(diff_image, cmap='gray')
+        axes[3].set_title("Otsu Threshold Image")
+        axes[3].axis('off')
 
-    axes[3].imshow(diff_image, cmap='gray')
-    axes[3].set_title("Otsu Threshold Image")
-    axes[3].axis('off')
+        axes[4].imshow(border_removed_mask, cmap='gray')
+        axes[4].set_title("Post Noise Removal")
+        axes[4].axis('off')
 
-    axes[4].imshow(border_removed_mask, cmap='gray')
-    axes[4].set_title("Post Noise Removal")
-    axes[4].axis('off')
+        axes[5].imshow(cleaned_mask, cmap='gray')
+        axes[5].set_title("Final: Inner Region Only")
+        axes[5].axis('off')
 
-    axes[5].imshow(cleaned_mask, cmap='gray')
-    axes[5].set_title("Final: Inner Region Only")
-    axes[5].axis('off')
-
-    plt.tight_layout()
-    plt.show()
+        plt.tight_layout()
+        plt.show()
 
     # Check if the structureless area takes up 10% of the mask
     total_lesion_pixels = np.sum(binary_mask.astype(bool))
@@ -151,7 +173,7 @@ def detect_structureless_areas(gray_img, mask, vis_img=None, save_vis_path=None,
 def detect_pigment_networks():
     return False, None
 
-def compute_dermoscopic_score(image: np.ndarray, mask: np.ndarray, save_vis_path: str = None) -> dict:
+def compute_dermoscopic_score(image: np.ndarray, mask: np.ndarray, save_vis_path: str = None, show_graph: bool = False) -> dict:
     """Compute dermoscopic structure score (Part D of ABCD rule)."""
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
@@ -161,8 +183,8 @@ def compute_dermoscopic_score(image: np.ndarray, mask: np.ndarray, save_vis_path
     gray = cv2.resize(gray, target_shape)
 
     # --- Feature Detection ---
-    has_dots, has_globules, vis_img = detect_dots_and_globules(gray, mask, image, save_vis_path)
-    has_structureless, vis_img = detect_structureless_areas(gray, mask, vis_img, save_vis_path)
+    has_dots, has_globules, vis_img = detect_dots_and_globules(gray, mask, image, save_vis_path=save_vis_path, show_graph=show_graph)
+    has_structureless, vis_img = detect_structureless_areas(gray, mask, vis_img, save_vis_path=save_vis_path , show_graph=show_graph)
 
     # Not implemented yet
     has_pigment_network = None
@@ -217,6 +239,6 @@ if __name__ == "__main__":
 
     image_filename = os.path.splitext(os.path.basename(image_path))[0]
     vis_path = f"output/visuals/{image_filename}_detections.jpg"
-
-    result = compute_dermoscopic_score(image, mask, save_vis_path=vis_path)
+    show_graph = True  # or False if you want to disable visualization
+    result = compute_dermoscopic_score(image, mask, save_vis_path=vis_path,show_graph=show_graph)
     print("Detected dermoscopic structures:", result)
