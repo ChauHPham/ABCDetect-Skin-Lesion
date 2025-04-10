@@ -242,9 +242,9 @@ def get_training_transform(image_height: int = 192, image_width: int = 256) -> A
             A.HorizontalFlip(p=0.5),
             A.VerticalFlip(p=0.5),
             A.Rotate(limit=30, p=0.5),
-            A.RandomBrightnessContrast(p=0.2),
-            A.GaussianBlur(blur_limit=3, p=0.1),
-            A.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1, p=0.3),
+            A.RandomBrightnessContrast(p=0.15),
+            A.GaussianBlur(blur_limit=1, p=0.1),
+            A.ColorJitter(brightness=0.15, contrast=0.15, saturation=0.15, hue=0.1, p=0.3),
             A.Normalize(mean=(0.0, 0.0, 0.0), std=(1.0, 1.0, 1.0), max_pixel_value=255.0),
             A.ToTensorV2(),
         ]
