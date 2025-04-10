@@ -229,32 +229,35 @@ def main() -> None:
     """Main function that parses arguments and runs the appropriate operation."""
     parser = argparse.ArgumentParser(prog="abcdetect", description="Skin Lesion Detection and Segmentation Tool")
 
-    # Common arguments
-    parser.add_argument(
-        "--datasets-dir",
-        "-d",
-        type=is_valid_directory,
-        default="datasets",
-        help="Directory to store datasets (default: ./datasets)",
-    )
-    parser.add_argument(
-        "--output-dir",
-        "-o",
-        type=is_valid_directory,
-        default="output",
-        help="Directory to store output files (default: ./output)",
-    )
-    parser.add_argument(
-        "-v", "--show-graph", action="store_true", help="Display matplotlib visualizations during execution"
-    )
-    parser.add_argument(
-        "--device",
-        "--dev",
-        type=str,
-        choices=["auto", "cuda", "cpu"],
-        default="auto",
-        help="Device to use for model training/inference (default: auto-detect)",
-    )
+    def add_common_arguments(cur_parser: argparse.ArgumentParser) -> None:
+        # Common arguments
+        cur_parser.add_argument(
+            "--datasets-dir",
+            "-d",
+            type=is_valid_directory,
+            default="datasets",
+            help="Directory to store datasets (default: ./datasets)",
+        )
+        cur_parser.add_argument(
+            "--output-dir",
+            "-o",
+            type=is_valid_directory,
+            default="output",
+            help="Directory to store output files (default: ./output)",
+        )
+        cur_parser.add_argument(
+            "-v", "--show-graph", action="store_true", help="Display matplotlib visualizations during execution"
+        )
+        cur_parser.add_argument(
+            "--device",
+            "--dev",
+            type=str,
+            choices=["auto", "cuda", "cpu"],
+            default="auto",
+            help="Device to use for model training/inference (default: auto-detect)",
+        )
+
+    add_common_arguments(parser)
 
     # Create subparsers for different modes
     subparsers = parser.add_subparsers(dest="mode", help="Operation mode")
@@ -264,6 +267,7 @@ def main() -> None:
     download_parser.add_argument(
         "--force", "-f", action="store_true", help="Force re-download even if data exists"
     )
+    add_common_arguments(download_parser)
 
     # Train mode
     train_parser = subparsers.add_parser("train", help="Train the segmentation model")
@@ -277,6 +281,7 @@ def main() -> None:
         default=0,
         help="Number of data loader workers (default: 0 for no multiprocessing)",
     )
+    add_common_arguments(train_parser)
 
     # Segment mode
     segment_parser = subparsers.add_parser("segment", help="Segment an image using a trained model")
@@ -287,6 +292,7 @@ def main() -> None:
         type=str,
         help="Path to the model file (uses latest model in output directory if not specified)",
     )
+    add_common_arguments(segment_parser)
 
     # Analyze mode
     analyze_parser = subparsers.add_parser("analyze", help="Analyze an image using ABCD criteria")
@@ -297,6 +303,7 @@ def main() -> None:
         type=str,
         help="Path to the model file (uses latest model in output directory if not specified)",
     )
+    add_common_arguments(analyze_parser)
 
     # Full demo mode
     demo_parser = subparsers.add_parser("demo", help="Run full demonstration (download, train, evaluate)")
@@ -311,6 +318,7 @@ def main() -> None:
         default=0,
         help="Number of data loader workers (default: 0 for no multiprocessing)",
     )
+    add_common_arguments(demo_parser)
 
     # Parse arguments
     args = parser.parse_args()
