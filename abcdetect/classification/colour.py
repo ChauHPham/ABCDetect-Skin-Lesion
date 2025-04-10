@@ -74,6 +74,11 @@ def calculate_colour_score(image: np.ndarray, mask: np.ndarray, *, show_graph: b
     if colour_count == 0:
         colour_count = 1
 
+    print("Detected colours: ", end="")
+    for col, frac in detected_colours.items():
+        print(f"{col} ({frac*100:.2f}%) ", end="")
+    print()
+
     # Optional visualization
     if show_graph:
         # Define display colours (in RGB) for each key colour.
