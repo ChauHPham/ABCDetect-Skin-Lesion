@@ -252,7 +252,6 @@ def calculate_shape_asymmetry(
 
     # Combine area asymmetry and shape overlap asymmetry with adjusted weights
     shape_asymmetry = (1.0 - adjusted_weight) * area_asymmetry + adjusted_weight * shape_overlap_asymmetry
-    print(area_asymmetry, shape_overlap_asymmetry)
     if show_graph:
         visualize_shape_asymmetry(
             half1_mask,

@@ -49,7 +49,7 @@ def analyze_abcd_features(
     mask = np.array(Image.open(mask_path).convert("L"))
 
     # Ensure binary mask
-    mask = (mask > 0).astype(np.float32)
+    mask = (mask > 0).astype(np.uint8)
 
     # Calculate ABCD features
     asymmetry_score = calculate_asymmetry_score(image, mask, show_graph=show_graph)
