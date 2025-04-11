@@ -7,6 +7,7 @@ from skimage.morphology import (erosion, dilation, closing, opening,
 from skimage.color import rgb2gray
 from skimage.transform import resize
 from skimage.filters import threshold_otsu
+import matplotlib.patches as mpatches
 
 
 
@@ -82,6 +83,11 @@ def detect_dots_and_globules(gray_img, mask, image, *, save_vis_path=None, show_
         axes[3].imshow(vis_img)
         axes[3].set_title("Detected Dots/Globules")
         axes[3].axis('off')
+
+        # ✅ Add legend inside the last subplot
+        red_patch = mpatches.Patch(color='red', label='Globules')
+        green_patch = mpatches.Patch(color='green', label='Dots')
+        axes[3].legend(handles=[green_patch, red_patch], loc='lower right', fontsize='small', frameon=True)
 
         plt.tight_layout()
         plt.show()
