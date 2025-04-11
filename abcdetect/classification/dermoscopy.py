@@ -1,13 +1,16 @@
 import os
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
-from skimage.morphology import (erosion, dilation, closing, opening,
-                                remove_small_objects, disk)
-from skimage.color import rgb2gray
-from skimage.transform import resize
+
+from skimage.morphology import (erosion, closing, remove_small_objects, disk, skeletonize)
 from skimage.filters import threshold_otsu
+from scipy.ndimage import convolve
+from skimage.measure import label, regionprops
+from skimage.filters.rank import entropy
+
+import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+import networkx
 
 
 
@@ -30,6 +33,24 @@ def pixels_to_mm2(area_px):
 
 def mm2_to_pixels(area_mm2):
     return area_mm2 / 0.01
+
+def normalize(img, min_val=None, max_val=None):
+    """
+    Normalize image to the range [0, 1].
+
+    Parameters:
+        img (ndarray): Input image (e.g. float32 or uint8).
+        min_val (float, optional): Minimum value for normalization. Defaults to img.min().
+        max_val (float, optional): Maximum value for normalization. Defaults to img.max().
+
+    Returns:
+        Normalized image in [0, 1].
+    """
+    min_val = img.min() if min_val is None else min_val
+    max_val = img.max() if max_val is None else max_val
+    if max_val - min_val == 0:
+        return np.zeros_like(img, dtype=np.float32)
+    return ((img - min_val) / (max_val - min_val)).astype(np.float32)
 
 def detect_dots_and_globules(gray_img, mask, image, *, save_vis_path=None, show_graph=False):
     """Detect dots and globules based on contour area."""
@@ -151,6 +172,8 @@ def detect_structureless_areas(gray_img, mask, vis_img=None,  *, save_vis_path=N
     # structureless_mask_final = remove_small_objects(remove_small_objects(structureless_mask_improved & inner_lesion_mask, min_size=60))
     if show_graph:
         fig, axes = plt.subplots(1, 6, figsize=(18, 4))
+        fig.suptitle("Structureless Area Detection Pipeline", fontsize=16)
+
         axes[0].imshow(gray_img, cmap='gray')
         axes[0].set_title("Gray Image")
         axes[0].axis('off')
@@ -184,8 +207,169 @@ def detect_structureless_areas(gray_img, mask, vis_img=None,  *, save_vis_path=N
 
     return bool(total_unstructured_area / total_lesion_pixels > 0.10), cleaned_mask.astype(np.uint8)
 
-def detect_pigment_networks():
-    return False, None
+def build_directional_dog_kernel(theta_deg, size=21, sigma1=(2,2), sigma2=(2,1)):
+    """
+    Create a Difference-of-Gaussians (DoG) kernel rotated by a given angle.
+    
+    Parameters:
+        theta_deg (float): Angle in degrees
+        size (int): Kernel size (must be odd)
+        sigma1 (tuple): (σx, σy) the standard deviation (amount of blur) of the gaussian
+        sigma2 (tuple): (σx, σy) std of sharper gaussian
+    
+    Returns:
+        2D DoG kernel rotated to angle theta
+    """
+
+    theta = np.deg2rad(theta_deg)
+    ax = np.linspace(-size // 2, size // 2, size)
+    xx, yy = np.meshgrid(ax, ax)
+
+    # Rotate coordinates (x', y')
+    x_prime = xx * np.cos(theta) + yy * np.sin(theta)
+    y_prime = -xx * np.sin(theta) + yy * np.cos(theta)
+
+    # Build Gaussians
+    G1 = np.exp(-(x_prime**2 / (2 * sigma1[0]**2) + y_prime**2 / (2 * sigma1[1]**2)))
+    G2 = np.exp(-(x_prime**2 / (2 * sigma2[0]**2) + y_prime**2 / (2 * sigma2[1]**2)))
+
+    G1 /= G1.sum()
+    G2 /= G2.sum()
+
+    return G1 - G2
+
+def apply_filter_bank(gray_image, angles=np.linspace(-90, 90, 12, endpoint=False), kernel_size=21):
+    """
+    Apply a bank of directional DoG filters and compute max response per pixel.
+
+    Parameters:
+        gray_image (ndarray): Input grayscale image
+        angles (list): Angles to apply filters at
+        kernel_size (int): Size of the DoG kernel
+
+    Returns:
+        max_response (ndarray): Max filter response across orientations
+    """
+    responses = []
+
+    for angle in angles:
+        kernel = build_directional_dog_kernel(angle, size=kernel_size)
+        response = convolve(gray_image.astype(np.float32), kernel)
+        responses.append(response)
+
+    # Combine all directional responses
+    max_response = np.max(responses, axis=0)
+    return max_response
+
+def prune_by_shape(binary_mask, ecc_thresh=0.95, solidity_thresh=0.5):
+    """
+    Remove elongated, wrinkle-like segments based on eccentricity and solidity.
+    
+    Parameters:
+        binary_mask: binary image of detected structures
+        ecc_thresh: max allowed eccentricity (close to 1 = long and thin)
+        solidity_thresh: min allowed solidity (area / convex area)
+
+    Returns:
+        Refined binary mask with more blob-like regions.
+    """
+
+    labeled = label(binary_mask)
+    out = np.zeros_like(binary_mask)
+    for region in regionprops(labeled):
+        if region.eccentricity < ecc_thresh and region.solidity > solidity_thresh:
+            out[labeled == region.label] = 1
+    return out
+
+def compute_network(masked_image, binary_mask):
+    # Apply directional DoG filters and threshold the response
+    network_response = apply_filter_bank(masked_image) * binary_mask
+    thresh_val = threshold_otsu(network_response[binary_mask > 0])
+    network_mask = (network_response > thresh_val) & binary_mask
+
+    # Thin structures to 1-pixel width
+    network_mask = skeletonize(network_mask)
+
+    # Remove long, thin structures based on shape
+    network_mask = prune_by_shape(network_mask, ecc_thresh=0.8, solidity_thresh=0.1)
+
+    # Keep only areas with high local entropy (textural complexity)
+    entropy_img = entropy(masked_image.astype(np.uint8), disk(9))
+    entropy_mask = entropy_img > threshold_otsu(entropy_img[binary_mask > 0])
+    network_mask &= entropy_mask
+
+    return network_mask
+
+def skeleton_to_graph(skeleton_mask):
+    # Convert skeleton into a graph where each pixel is a node
+    G = networkx.Graph()
+    coords = np.column_stack(np.nonzero(skeleton_mask))
+    for y, x in coords:
+        for dy in [-1, 0, 1]:
+            for dx in [-1, 0, 1]:
+                if dx == dy == 0:
+                    continue
+                ny, nx_ = y + dy, x + dx
+                if (0 <= ny < skeleton_mask.shape[0] and 0 <= nx_ < skeleton_mask.shape[1] and skeleton_mask[ny, nx_]):
+                    G.add_edge((y, x), (ny, nx_))
+    return G
+
+def count_graph_edges_and_nodes(skeleton_mask):
+    # Count nodes and edges in the graph
+    G = skeleton_to_graph(skeleton_mask)
+    num_nodes = G.number_of_nodes()
+    num_edges = G.number_of_edges()
+    return num_nodes, num_edges
+
+def detect_pigment_networks(image: np.ndarray, mask: np.ndarray, save_vis_path: str = None, show_graph=False):
+    binary_mask = mask > 0.5
+    green_channel = image[:, :, 1]  # Use the green channel for better contrast
+    masked_green_channel = green_channel * binary_mask  # Apply lesion mask
+
+    # Build directional filter responses for detecting hair
+    responses = [apply_filter_bank(masked_green_channel, kernel_size=size) for size in [2, 5, 10, 15, 21]]
+    stacked = np.stack(responses, axis=-1)
+
+    # Detect hair by thresholding max response
+    max_response = np.max(stacked, axis=-1)
+    max_response = normalize(max_response, np.min(max_response), np.max(max_response))
+    thresh_val = threshold_otsu(max_response[binary_mask])
+    hair_mask = (max_response > thresh_val).astype(np.uint8)
+
+    # Inpaint the green channel to remove detected hair
+    inpainted_image = cv2.inpaint(masked_green_channel.astype(np.uint8), hair_mask, 5, cv2.INPAINT_TELEA)
+
+    # Compute pigment network masks for both original and hair-inpainted images
+    network_mask = compute_network(masked_green_channel, binary_mask)
+    network_mask_hairless = compute_network(inpainted_image, binary_mask)
+
+    # Use the better network (larger detected structure) as the final mask
+    optimal_mask = network_mask if np.sum(network_mask) > np.sum(network_mask_hairless) else network_mask_hairless
+
+    # Analyze the resulting graph
+    V, E = count_graph_edges_and_nodes(optimal_mask)
+    structure_ratio = E / (V + 1)  # Prevent division by zero
+    length_ratio = np.sum(optimal_mask) / np.sum(binary_mask)
+    composite_score = structure_ratio * length_ratio
+
+    # Optional visualization for debugging and analysis
+    if show_graph:
+        fig, axes = plt.subplots(1, 5, figsize=(18, 4))
+        fig.suptitle("Pigmented Network Area Detection Pipeline", fontsize=16)
+
+        axes[0].imshow(green_channel, cmap='gray'); axes[0].set_title("Green Channel"); axes[0].axis('off')
+        axes[1].imshow(masked_green_channel, cmap='gray'); axes[1].set_title("Masked Green"); axes[1].axis('off')
+        axes[2].imshow(network_mask_hairless, cmap='gray'); axes[2].set_title("Hairless Network"); axes[2].axis('off')
+        axes[3].imshow(network_mask, cmap='gray'); axes[3].set_title("Original Network"); axes[3].axis('off')
+        axes[4].imshow(optimal_mask, cmap='gray'); axes[4].set_title("Selected Network"); axes[4].axis('off')
+        plt.tight_layout()
+        plt.show()
+
+        print(f"Vertices: {V}, Edges: {E}, Skeleton length: {np.sum(optimal_mask)}, Lesion area: {np.sum(binary_mask)}")
+        print(f"Structure ratio: {structure_ratio:.4f}, Length ratio: {length_ratio:.4f}, Composite score: {composite_score:.6f}")
+
+    # Decide if a pigment network is present
+    return composite_score >= 0.1, optimal_mask
 
 def compute_dermoscopic_score(image: np.ndarray, mask: np.ndarray, save_vis_path: str = None, show_graph: bool = False) -> dict:
     """Compute dermoscopic structure score (Part D of ABCD rule)."""
