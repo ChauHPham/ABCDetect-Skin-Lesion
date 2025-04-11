@@ -14,8 +14,7 @@ from skimage.morphology import remove_small_objects
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
-from .stratification import (stratified_sampling,
-                             visualize_dx_column_as_histogram)
+from .stratification import stratified_sampling, visualize_dx_column_as_histogram
 
 
 class LesionDataset(Dataset[tuple[torch.Tensor, torch.Tensor]]):
@@ -722,29 +721,45 @@ def segment_single_image(
     print(f"Mask saved to {mask_output_path}.")
 
     if show_graph:
-        # Create visualizations
-        orig_array = np.array(orig_image) / 255.0
-        orig_red = np.zeros_like(orig_array)
-        orig_red[..., 0] = 1.0
+        # Resize for visualization to improve rendering speed
+        visual_image = orig_image.copy()
+        visual_mask = Image.fromarray((final_mask * 255).astype(np.uint8))
+
+        # Calculate new dimensions while maintaining aspect ratio
+        ratio = min(800 / orig_width, 800 / orig_height)
+        new_width = int(orig_width * ratio)
+        new_height = int(orig_height * ratio)
+
+        # Resize both image and mask
+        visual_image = visual_image.resize((new_width, new_height), Image.LANCZOS)
+        visual_mask = visual_mask.resize((new_width, new_height), Image.NEAREST)
+
+        # Convert to arrays for visualization
+        visual_image_array = np.array(visual_image) / 255.0
+        visual_mask_array = np.array(visual_mask) / 255.0
+
+        # Create red overlay color
+        visual_red = np.zeros_like(visual_image_array)
+        visual_red[..., 0] = 1.0
 
         # Display the results
         fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
-        axes[0].imshow(orig_image)
+        axes[0].imshow(visual_image_array)
         axes[0].set_title("Original Image")
         axes[0].axis("off")
 
-        axes[1].imshow(final_mask, cmap="gray")
+        axes[1].imshow(visual_mask_array, cmap="gray")
         axes[1].set_title("Generated Mask")
         axes[1].axis("off")
 
-        # Create overlay with smoothed mask
-        orig_overlay = np.where(
-            final_mask[..., None] > 0.5,
-            (1 - alpha) * orig_array + alpha * orig_red,
-            orig_array,
+        # Create overlay with resized mask
+        visual_overlay = np.where(
+            visual_mask_array[..., None] > 0.5,
+            (1 - alpha) * visual_image_array + alpha * visual_red,
+            visual_image_array,
         )
-        axes[2].imshow(orig_overlay)
+        axes[2].imshow(visual_overlay)
         axes[2].set_title("Overlay")
         axes[2].axis("off")
 

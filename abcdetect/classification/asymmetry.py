@@ -6,7 +6,7 @@ import numpy as np
 from skimage import feature
 
 
-def calculate_asymmetry_score(image: np.ndarray, mask: np.ndarray, *, show_graph: bool = False) -> float:
+def calculate_asymmetry_score(image: np.ndarray, mask: np.ndarray, *, show_graph: bool = False) -> int:
     """Calculate asymmetry score for the lesion according to ABCD rule.
 
     Args:
@@ -20,13 +20,13 @@ def calculate_asymmetry_score(image: np.ndarray, mask: np.ndarray, *, show_graph
     # Find contours of the lesion mask
     contours, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not contours:
-        return 0.0
+        return 0
     contour = max(contours, key=cv2.contourArea)
 
     # Find centroid of the lesion
     moments = cv2.moments(contour)
     if moments["m00"] == 0:
-        return 0.0
+        return 0
 
     cx = int(moments["m10"] / moments["m00"])
     cy = int(moments["m01"] / moments["m00"])
