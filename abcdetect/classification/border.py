@@ -51,7 +51,6 @@ def calculate_border_score(image: np.ndarray, mask: np.ndarray, *, show_graph: b
     border_score = 0
     for segment in image_segments:
         segment_score = segment_edge_detection(segment)
-        print("segment score", segment_score)
         # Add up the score of each segment for total border score 
         border_score += segment_score
     
@@ -96,12 +95,10 @@ def segment_edge_detection (image_segment):
         # Compute perimeter to area ratio for segments + edges found
         image_contours, _ = cv2.findContours(image_edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         contour_area = cv2.contourArea(image_contours[0])
-        print("Contour", contour_area)
 
         # Compare against border threshold value to differentiate distinct VS indistinct edges
         # Border threshold value should be adjusted based on validated border strength 
         border_threshold = 2.5
-        print("Border", border_threshold)
         if contour_area > 0 and contour_area < border_threshold:
             # Strong distinct border in this segment found
             return 2
