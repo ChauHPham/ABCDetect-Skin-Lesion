@@ -221,6 +221,8 @@ def analyze_multiple_images(
         try:
             analyze_image(image_path, model_path, output_dir, device, show_graph=False)
         except Exception as e:
+            from traceback import format_exc
+            print(format_exc())
             print(f"Error analyzing {image_path.name}: {str(e)}")
 
 
