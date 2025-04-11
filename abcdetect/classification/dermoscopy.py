@@ -1,10 +1,10 @@
 import os
 import cv2
 import numpy as np
-
-from skimage.morphology import (erosion, closing, remove_small_objects, disk, skeletonize)
-from skimage.filters import threshold_otsu
-from scipy.ndimage import convolve
+import math
+from skimage.morphology import (erosion, dilation, closing, remove_small_objects, disk, skeletonize, thin)
+from skimage.filters import threshold_otsu, frangi
+from scipy.ndimage import convolve, distance_transform_edt
 from skimage.measure import label, regionprops
 from skimage.filters.rank import entropy
 
@@ -51,6 +51,25 @@ def normalize(img, min_val=None, max_val=None):
     if max_val - min_val == 0:
         return np.zeros_like(img, dtype=np.float32)
     return ((img - min_val) / (max_val - min_val)).astype(np.float32)
+
+def overlay_mask(img, mask, alpha=0.4, overlay_channel=0):
+    # Ensure image is RGB
+    if len(img.shape) == 2 or img.shape[2] == 1:
+        image_rgb = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+    else:
+        image_rgb = img.copy()
+
+    # Create color overlay (same dtype as image)
+    overlay = np.zeros_like(image_rgb, dtype=np.uint8)
+    overlay[..., overlay_channel] = 255  # Set the desired color channel to max
+
+    # Apply blending
+    blended = image_rgb.copy().astype(np.float32)
+    blended[mask > 0] = (
+        (1 - alpha) * blended[mask > 0] + alpha * overlay[mask > 0]
+    )
+
+    return blended.astype(np.uint8)
 
 def detect_dots_and_globules(gray_img, mask, image, *, save_vis_path=None, show_graph=False):
     """Detect dots and globules based on contour area."""
@@ -321,27 +340,31 @@ def count_graph_edges_and_nodes(skeleton_mask):
     num_edges = G.number_of_edges()
     return num_nodes, num_edges
 
-def detect_pigment_networks(image: np.ndarray, mask: np.ndarray, save_vis_path: str = None, composite_score_threshold:float = 0.1, show_graph=False):
-    binary_mask = mask > 0
-    green_channel = image[:, :, 1]  # Use the green channel for better contrast
-    masked_green_channel = green_channel * binary_mask  # Apply lesion mask
-
+def hair_and_obstruction_removal(image, mask, kernel_sizes=[21]):
     # Build directional filter responses for detecting hair
-    responses = [apply_filter_bank(masked_green_channel, kernel_size=size) for size in [2, 5, 10, 15, 21]]
+    responses = [apply_filter_bank(image, kernel_size=size) for size in kernel_sizes]
     stacked = np.stack(responses, axis=-1)
 
     # Detect hair by thresholding max response
     max_response = np.max(stacked, axis=-1)
     max_response = normalize(max_response, np.min(max_response), np.max(max_response))
-    thresh_val = threshold_otsu(max_response[binary_mask])
+    thresh_val = threshold_otsu(max_response[mask])
     hair_mask = (max_response > thresh_val).astype(np.uint8)
 
     # Inpaint the green channel to remove detected hair
-    inpainted_image = cv2.inpaint(masked_green_channel.astype(np.uint8), hair_mask, 5, cv2.INPAINT_TELEA)
+    inpainted_image = cv2.inpaint(image.astype(np.uint8), hair_mask, 5, cv2.INPAINT_TELEA)
+    return inpainted_image
+
+def detect_pigment_networks(image: np.ndarray, mask: np.ndarray, save_vis_path: str = None, composite_score_threshold:float = 0.1, show_graph=False):
+    binary_mask = mask > 0
+    green_channel = image[:, :, 1]  # Use the green channel for better contrast
+    masked_green_channel = green_channel * binary_mask  # Apply lesion mask
+
+    hairless_image = hair_and_obstruction_removal(masked_green_channel, binary_mask, kernel_sizes=[2, 5, 10, 15, 21])
 
     # Compute pigment network masks for both original and hair-inpainted images
     network_mask = compute_network(masked_green_channel, binary_mask)
-    network_mask_hairless = compute_network(inpainted_image, binary_mask)
+    network_mask_hairless = compute_network(hairless_image, binary_mask)
 
     # Use the better network (larger detected structure) as the final mask
     optimal_mask = network_mask if np.sum(network_mask) > np.sum(network_mask_hairless) else network_mask_hairless
@@ -368,6 +391,142 @@ def detect_pigment_networks(image: np.ndarray, mask: np.ndarray, save_vis_path: 
     # Decide if a pigment network is present
     return composite_score >= composite_score_threshold, optimal_mask
 
+def filter_radial_lines(regions, lesion_centroid, angle_thresh_min=0, angle_thresh_max=50):
+    filtered = []
+    cy, cx = lesion_centroid  # lesion centroid
+
+    for region in regions:
+        if region.area < 5:
+            continue  # ignore very small fragments
+
+        # Coordinates of the line region
+        y0, x0 = region.centroid  # center of the line
+        dy, dx = y0 - cy, x0 - cx  # vector from lesion center to line center
+
+        # Radial vector (normalized)
+        radial_vec = np.array([dx, dy])
+        radial_vec_norm = np.linalg.norm(radial_vec)
+        if radial_vec_norm == 0:
+            continue  # skip if at the exact center
+        radial_vec = radial_vec / radial_vec_norm
+
+        # Orientation of the region (skimage gives angle relative to x-axis)
+        # Convert orientation to a unit vector pointing in the direction of the major axis
+        theta = region.orientation  # in radians
+        line_vec = np.array([np.cos(theta), -np.sin(theta)])  # y-axis is down
+
+        # Compute the angle between vectors
+        dot = np.dot(radial_vec, line_vec)
+        angle = np.arccos(np.clip(np.abs(dot), -1.0, 1.0)) * 180 / np.pi
+
+        # Keep if alignment angle is below threshold
+        if angle >= angle_thresh_min and angle <= angle_thresh_max:
+            filtered.append(region)
+
+    return filtered
+
+def get_valid_streaks(skeleton, radial_streaks, min_streak_area, min_branch_points):
+    valid_streaks = []
+
+    for region in radial_streaks:
+        if region.area < min_streak_area:
+            continue
+
+        coords = region.coords
+        branch_points = 0
+
+        for y, x in coords:
+            # 3x3 neighborhood, subtract 1 for the center pixel
+            neighborhood = skeleton[max(0, y-1):y+2, max(0, x-1):x+2]
+            degree = np.sum(neighborhood) - 1
+            if degree > 2:
+                branch_points += 1
+
+        if branch_points >= min_branch_points:
+            valid_streaks.append(region)
+    
+    return valid_streaks
+
+def detect_streaks(gray: np.ndarray, mask: np.ndarray, min_streak_area=5, min_branch_points=2, show_graph=False):
+    binary_mask = mask > 0
+
+    # STEP 1: PREPROCESSING
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    gray = clahe.apply(gray)
+
+    # Median filtering to reduce noise
+    gray = cv2.medianBlur(gray, ksize=3)
+
+    # Compute lesion mask properties (using skimage)
+    props = regionprops(mask.astype(int))
+    minor_axis_length = props[0].minor_axis_length  # length of minor axis of lesion
+
+    # Define border band width (one third of minor axis, at least a minimum)
+    band_width = max(int(minor_axis_length / 3), 5)  # at least 5 px
+    selem = disk(band_width)  # circular structuring element
+
+    # Erode the lesion mask to get inner mask
+    inner_mask = erosion(mask, selem)
+
+    # Border band: pixels in mask but not in inner_mask
+    border_band = binary_mask - inner_mask
+
+    roi = cv2.bitwise_and(gray, gray, mask=border_band)
+
+    # Invert ROI for vesselness (make dark streaks bright)
+    roi_inverted = cv2.bitwise_not(roi)  # invert grayscale: dark→light
+
+    # Apply Frangi filter to enhance line structures
+    line_prob = frangi(roi_inverted, scale_range=(1, 5), scale_step=1, beta=0.5, alpha=15)
+
+    # Remove line from border
+    line_prob = line_prob * erosion(border_band, disk(5))
+
+    # 'line_prob' now contains high values where linear structures are likely
+    # (We might normalize or scale it to 0-255 for thresholding convenience)
+    line_enhanced = np.uint8(np.clip(line_prob * 255, 0, 255))
+
+    # Binarize the enhanced line image
+    thresh_val = threshold_otsu(line_enhanced)
+    binary_lines = (line_enhanced >= thresh_val).astype(np.uint8)
+
+    # Close small gaps in lines (3x3 square structuring element)
+    binary_lines = cv2.morphologyEx(binary_lines, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT,(3,3)))
+
+    # Thin the binary mask to get skeleton
+    skeleton = thin(binary_lines)
+    skeleton = closing(skeleton, disk(2))
+
+    # Label connected components on the skeleton
+    labels = label(skeleton, connectivity=2)
+    regions = regionprops(labels)
+
+    lesion_centroid = props[0].centroid  # from earlier regionprops(mask)
+    radial_streaks = filter_radial_lines(regions, lesion_centroid, 45, 90)
+    valid_streaks = get_valid_streaks(skeleton, radial_streaks, min_streak_area, min_branch_points)
+
+    overlay = gray.copy()
+    
+    for region in valid_streaks:
+        for y, x in region.coords:
+            if 0 <= y < overlay.shape[0] and 0 <= x < overlay.shape[1]:
+                overlay[int(y), int(x)] = 255
+
+    if show_graph:
+        fig, axes = plt.subplots(1, 8, figsize=(18, 4))
+        fig.suptitle("Streak Detection Pipeline", fontsize=16)
+
+        axes[0].imshow(gray); axes[0].set_title("Original"); axes[0].axis('off')
+        axes[1].imshow(roi_inverted, cmap='gray'); axes[1].set_title("Inverted ROI"); axes[1].axis('off')
+        axes[2].imshow(line_enhanced, cmap='gray'); axes[2].set_title("Enhanced Lines"); axes[2].axis('off')
+        axes[3].imshow(skeleton, cmap='gray'); axes[3].set_title("Skeleton"); axes[3].axis('off')
+        axes[4].imshow(overlay, cmap='gray'); axes[4].set_title("Detected Streaks"); axes[4].axis('off')
+
+        plt.tight_layout()
+        plt.show()
+
+    return len(valid_streaks) > 3, overlay
+        
 def compute_dermoscopic_score(image: np.ndarray, mask: np.ndarray, save_vis_path: str = None, show_graph: bool = False) -> dict:
     """Compute dermoscopic structure score (Part D of ABCD rule)."""
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -381,16 +540,14 @@ def compute_dermoscopic_score(image: np.ndarray, mask: np.ndarray, save_vis_path
     has_dots, has_globules, vis_img = detect_dots_and_globules(gray, mask, image, save_vis_path=save_vis_path, show_graph=show_graph)
     has_structureless, vis_img = detect_structureless_areas(gray, mask, vis_img, save_vis_path=save_vis_path , show_graph=show_graph)
     has_pigment_network, vis_img = detect_pigment_networks(image, mask, save_vis_path=save_vis_path)
-
-    # Not implemented yet
-    has_streaks = None
+    has_streaks, vis_img = detect_streaks(gray, mask, show_graph=show_graph)
 
     # Final scoring (0.5 points per feature present)
     present_features = sum([
         int(has_dots),
         int(has_globules),
         int(has_pigment_network),  # pigment network
-        0,  # streaks
+        int(has_streaks),  # streaks
         int(has_structureless)
     ])
 
