@@ -50,7 +50,7 @@ def analyze_abcd_features(
     mask = np.array(Image.open(mask_path).convert("L"))
 
     # Resize images to improve processing speed
-    max_width, max_height = 600, 400
+    max_width, max_height = 400, 300
     img_height, img_width = image.shape[:2]
     aspect_ratio = img_width / img_height
 
@@ -69,13 +69,13 @@ def analyze_abcd_features(
 
     # Calculate ABCD features
     print("Calculating asymmetry score...")
-    asymmetry_score = calculate_asymmetry_score(image, mask, show_graph=show_graph)
+    asymmetry_score = calculate_asymmetry_score(image.copy(), mask.copy(), show_graph=show_graph)
     print("Calculating border score...")
-    border_score = calculate_border_score(image, mask, show_graph=show_graph)
+    border_score = calculate_border_score(image.copy(), mask.copy(), show_graph=show_graph)
     print("Calculating colour score...")
-    colour_score = calculate_colour_score(image, mask, show_graph=show_graph)
+    colour_score = calculate_colour_score(image.copy(), mask.copy(), show_graph=show_graph)
     print("Calculating dermoscopic structure score...")
-    dermoscopic_structure_score = calculate_dermoscopic_structure_score(image, mask, show_graph=show_graph)
+    dermoscopic_structure_score = calculate_dermoscopic_structure_score(image.copy(), mask.copy(), show_graph=show_graph)
 
     # Calculate TDS (Total Dermascopic Score)
     # TDS = (A × 1.3) + (B × 0.1) + (C × 0.5) + (D × 0.5)
