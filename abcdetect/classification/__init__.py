@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
@@ -48,13 +49,32 @@ def analyze_abcd_features(
     image = np.array(Image.open(image_path).convert("RGB"))
     mask = np.array(Image.open(mask_path).convert("L"))
 
+    # Resize images to improve processing speed
+    max_width, max_height = 600, 400
+    img_height, img_width = image.shape[:2]
+    aspect_ratio = img_width / img_height
+
+    if aspect_ratio > 1:
+        new_width = min(img_width, max_width)
+        new_height = int(new_width / aspect_ratio)
+    else:
+        new_height = min(img_height, max_height)
+        new_width = int(new_height * aspect_ratio)
+
+    image = cv2.resize(image, (new_width, new_height), interpolation=cv2.INTER_AREA)
+    mask = cv2.resize(mask, (new_width, new_height), interpolation=cv2.INTER_NEAREST)
+
     # Ensure binary mask
     mask = (mask > 0).astype(np.uint8)
 
     # Calculate ABCD features
+    print("Calculating asymmetry score...")
     asymmetry_score = calculate_asymmetry_score(image, mask, show_graph=show_graph)
+    print("Calculating border score...")
     border_score = calculate_border_score(image, mask, show_graph=show_graph)
+    print("Calculating colour score...")
     colour_score = calculate_colour_score(image, mask, show_graph=show_graph)
+    print("Calculating dermoscopic structure score...")
     dermoscopic_structure_score = calculate_dermoscopic_structure_score(image, mask, show_graph=show_graph)
 
     # Calculate TDS (Total Dermascopic Score)

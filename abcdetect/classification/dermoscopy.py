@@ -59,7 +59,7 @@ def detect_dots_and_globules(gray_img, mask, image, *, save_vis_path=None, show_
     _, thresh = cv2.threshold(blurred, 80, 255, cv2.THRESH_BINARY_INV)
 
     contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    print(f"Total contours found: {len(contours)}")
+    # print(f"Total contours found: {len(contours)}")
 
     dots, globules = 0, 0
     vis_img = image.copy()
@@ -394,18 +394,8 @@ def compute_dermoscopic_score(image: np.ndarray, mask: np.ndarray, save_vis_path
         int(has_structureless)
     ])
 
-    dermoscopy_score_dict = {
-        "dots": has_dots,
-        "globules": has_globules,
-        "structureless_areas": has_structureless,
-        "pigment_network": has_pigment_network,
-        "streaks": has_streaks,
-        "D_score": present_features
-    }
-
-    print(f"Total Dermoscopy Scores: {present_features}")
-    for key, var in dermoscopy_score_dict.items():
-        print(f"Score for {key}: {var}")
+    print(f"Dermoscopic structure score: {present_features} (dots: {has_dots}, globules: {has_globules}, "
+          f"structureless: {has_structureless}, pigment network: {has_pigment_network}, streaks: {has_streaks})")
 
     # Save visualization if requested
     if save_vis_path:

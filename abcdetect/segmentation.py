@@ -678,7 +678,7 @@ def segment_single_image(
     Returns:
         Path to the saved mask file.
     """
-    print("Segmenting image using trained model at ", model_save_path)
+    print("Segmenting image using trained model at", model_save_path)
 
     model = UNET(in_channels=3, out_channels=1).to(device)
     model.load_state_dict(torch.load(model_save_path, map_location=device))
