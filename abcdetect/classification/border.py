@@ -51,6 +51,7 @@ def calculate_border_score(image: np.ndarray, mask: np.ndarray, *, show_graph: b
     border_score = 0
     for segment in image_segments:
         segment_score = segment_edge_detection(segment)
+        print("segment score", segment_score)
         # Add up the score of each segment for total border score 
         border_score += segment_score
     
@@ -58,7 +59,7 @@ def calculate_border_score(image: np.ndarray, mask: np.ndarray, *, show_graph: b
     if show_graph:
             # Adjust thresholds to be the same values as the segment edge detection function
             low_threshold = 70
-            high_threshold = 100 
+            high_threshold = 150 
             cannyedges = cv2.Canny(newimage, low_threshold, high_threshold, 1, L2gradient= True)
             # Plot images all on the same graph with titles
             fig, axes = plt.subplots(1, 4, figsize=(12, 4), dpi = 80)
@@ -89,21 +90,26 @@ def segment_edge_detection (image_segment):
         # Find high gradient edges of segmented image
         # Adjust lower and higher thresholds for stronger edges 
         low_threshold = 70
-        high_threshold = 100 
-        image_edges = cv2.Canny(image_segment, low_threshold, high_threshold)
+        high_threshold = 150
+        image_edges = cv2.Canny(image_segment, low_threshold, high_threshold, 1, L2gradient= True)
 
         # Compute perimeter to area ratio for segments + edges found
         image_contours, _ = cv2.findContours(image_edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         contour_area = cv2.contourArea(image_contours[0])
+        print("Contour", contour_area)
 
         # Compare against border threshold value to differentiate distinct VS indistinct edges
         # Border threshold value should be adjusted based on validated border strength 
-        border_threshold = 0.2
-        if contour_area >= border_threshold:
-            # Distinct border in this segment found, return score of +1
-            return 1
+        border_threshold = 2.5
+        print("Border", border_threshold)
+        if contour_area > 0 and contour_area < border_threshold:
+            # Strong distinct border in this segment found
+            return 2
+        elif contour_area == border_threshold:
+           # Weak distinct border in this segment found
+           return 1
         else:
-            # Indistinct border in this segment found, return score of 0
+            # Indistinct border in this segment found
             return 0
     
 def rgb2gray (image):
@@ -114,17 +120,49 @@ def rgb2gray (image):
 if __name__ == '__main__':
     import sys
 
-    # Testing image
+    # Test 1 
     # Opencv reads image in BGR -> must convert to RGB  
-    img = cv2.imread(r"D:\School\Classes\CMPT419\project\Skin Lesion Sample Set-20250410T015009Z-001\Skin Lesion Sample Set\ISIC_0024306.jpg")[:,:,::-1]
-    mask = cv2.imread(r"D:\School\Classes\CMPT419\project\Skin Lesion Sample Set-20250410T015009Z-001\Skin Lesion Sample Set\ISIC_0024306_segmentation.png")[:,:,::-1]
+    # img = cv2.imread(r"D:\School\Classes\CMPT419\project\Skin Lesion Sample Set-20250410T015009Z-001\Skin Lesion Sample Set\ISIC_0024545.jpg")[:,:,::-1]
+    # mask = cv2.imread(r"D:\School\Classes\CMPT419\project\Skin Lesion Sample Set-20250410T015009Z-001\Skin Lesion Sample Set\ISIC_0024545_segmentation.png")[:,:,::-1]
 
+    # Test 2 
+    # img2 = cv2.imread(r"D:\School\Classes\CMPT419\project\Skin Lesion Sample Set-20250410T015009Z-001\Skin Lesion Sample Set\ISIC_0024644.jpg")[:,:,::-1]
+    # mask2 = cv2.imread(r"D:\School\Classes\CMPT419\project\Skin Lesion Sample Set-20250410T015009Z-001\Skin Lesion Sample Set\ISIC_0024644_segmentation.png")[:,:,::-1]
+    
+    # Test 3 
+    # img3 = cv2.imread(r"D:\School\Classes\CMPT419\project\Skin Lesion Sample Set-20250410T015009Z-001\Skin Lesion Sample Set\ISIC_0024732.jpg")[:,:,::-1]
+    # mask3 = cv2.imread(r"D:\School\Classes\CMPT419\project\Skin Lesion Sample Set-20250410T015009Z-001\Skin Lesion Sample Set\ISIC_0024732_segmentation.png")[:,:,::-1]
+    
+    # Test 4 
+    # img4 = cv2.imread(r"D:\School\Classes\CMPT419\project\Skin Lesion Sample Set-20250410T015009Z-001\Skin Lesion Sample Set\ISIC_0024323.jpg")[:,:,::-1]
+    # mask4 = cv2.imread(r"D:\School\Classes\CMPT419\project\Skin Lesion Sample Set-20250410T015009Z-001\Skin Lesion Sample Set\ISIC_0024323_segmentation.png")[:,:,::-1]
+    
+    # Test 5 
+    # img5 = cv2.imread(r"D:\School\Classes\CMPT419\project\Skin Lesion Sample Set-20250410T015009Z-001\Skin Lesion Sample Set\ISIC_0024349.jpg")[:,:,::-1]
+    # mask5 = cv2.imread(r"D:\School\Classes\CMPT419\project\Skin Lesion Sample Set-20250410T015009Z-001\Skin Lesion Sample Set\ISIC_0024349_segmentation.png")[:,:,::-1]
+
+    # Test 6 
+    # img6 = cv2.imread(r"D:\School\Classes\CMPT419\project\Skin Lesion Sample Set-20250410T015009Z-001\Skin Lesion Sample Set\ISIC_0024563.jpg")[:,:,::-1]
+    # mask6 = cv2.imread(r"D:\School\Classes\CMPT419\project\Skin Lesion Sample Set-20250410T015009Z-001\Skin Lesion Sample Set\ISIC_0024563_segmentation.png")[:,:,::-1]
+    
     # Placeholder image 
-    # img = np.random.randint(0, 255, (256, 256, 3), dtype=np.uint8)[:,:,::-1]
-    # mask = np.zeros((256, 256), dtype=np.uint8)[:,:,::-1]
+    img = np.random.randint(0, 255, (256, 256, 3), dtype=np.uint8)[:,:,::-1]
+    mask = np.zeros((256, 256), dtype=np.uint8)[:,:,::-1]
 
-    # Calculate color score.
+    # Calculate border score for each demo lesion.
     score = calculate_border_score(img, mask, show_graph=True)
     print("TDS Border Contribution score:", score)
+
+    # Additional Border Score Tests
+    # score2 = calculate_border_score(img2, mask2, show_graph=True)
+    # print("TDS Border Contribution score:", score2)
+    # score3 = calculate_border_score(img3, mask3, show_graph=True)
+    # print("TDS Border Contribution score:", score3)
+    # score4 = calculate_border_score(img4, mask4, show_graph=True)
+    # print("TDS Border Contribution score:", score4)
+    # score5 = calculate_border_score(img5, mask5, show_graph=True)
+    # print("TDS Border Contribution score:", score5)
+    # score6 = calculate_border_score(img6, mask6, show_graph=True)
+    # print("TDS Border Contribution score:", score6)
 
     sys.exit(0)
