@@ -526,6 +526,7 @@ def train_segmentation_model(
     print("Training completed.")
     if show_graph:
         fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(10, 12), sharex=True)
+        fig.suptitle("Segmentation Model Training Progress", fontsize=16)
 
         # Plot mean loss
         ax1.plot(range(1, len(mean_losses) + 1), mean_losses, "b-o")  # blue line with circle markers
@@ -677,7 +678,7 @@ def segment_single_image(
     Returns:
         Path to the saved mask file.
     """
-    print("Segmenting image using trained model at", model_save_path)
+    print(f"Segmenting image with model {model_save_path.name}...\n")
 
     model = UNET(in_channels=3, out_channels=1).to(device)
     model.load_state_dict(torch.load(model_save_path, map_location=device))

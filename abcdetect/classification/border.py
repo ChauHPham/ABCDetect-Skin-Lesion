@@ -65,7 +65,7 @@ def calculate_border_score(image: np.ndarray, mask: np.ndarray, *, show_graph: b
                     "start_angle": angles[i],
                     "end_angle": angles[i + 1],
                     "is_counted": False,
-                    "color_contrast": 0,
+                    "colour_contrast": 0,
                     "irregularity": 0,
                 }
             )
@@ -93,7 +93,7 @@ def calculate_border_score(image: np.ndarray, mask: np.ndarray, *, show_graph: b
                 "start_angle": angles[i],
                 "end_angle": angles[i + 1],
                 "is_counted": is_counted,
-                "color_contrast": segment_contrast,
+                "colour_contrast": segment_contrast,
                 "irregularity": segment_irregularity,
                 "irregularity_threshold": irregularity_threshold,
                 "sharp_edge": sharp_edge,
@@ -226,7 +226,7 @@ def calculate_segment_irregularity(
 
 
 def calculate_segment_contrast(image: np.ndarray, mask: np.ndarray, segment_border: np.ndarray) -> float:
-    """Calculate the color contrast across the border for a specific segment.
+    """Calculate the colour contrast across the border for a specific segment.
 
     Args:
         image: RGB image of the lesion.
@@ -234,9 +234,9 @@ def calculate_segment_contrast(image: np.ndarray, mask: np.ndarray, segment_bord
         segment_border: Binary mask of the segment border region.
 
     Returns:
-        Contrast value representing the color difference inside vs outside.
+        Contrast value representing the colour difference inside vs outside.
     """
-    # Convert to LAB for better perceptual color difference
+    # Convert to LAB for better perceptual colour difference
     lab_image = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
 
     # Create dilated and eroded versions of the segment border
@@ -247,13 +247,13 @@ def calculate_segment_contrast(image: np.ndarray, mask: np.ndarray, segment_bord
     if np.sum(outer_border) == 0 or np.sum(inner_border) == 0:
         return 0
 
-    # Get average LAB colors on both sides of the border
-    inner_color = np.mean(lab_image[inner_border > 0], axis=0)
-    outer_color = np.mean(lab_image[outer_border > 0], axis=0)
+    # Get average LAB colours on both sides of the border
+    inner_colour = np.mean(lab_image[inner_border > 0], axis=0)
+    outer_colour = np.mean(lab_image[outer_border > 0], axis=0)
 
     # Calculate Euclidean distance in LAB space (Delta E)
-    color_distance = np.sqrt(np.sum((inner_color - outer_color) ** 2))
-    return color_distance
+    colour_distance = np.sqrt(np.sum((inner_colour - outer_colour) ** 2))
+    return colour_distance
 
 
 def preprocess_image(image: np.ndarray, mask: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -391,7 +391,7 @@ def visualize_border_analysis(
     axes[0, 1].set_title("Preprocessed Image")
     axes[0, 1].axis("off")
 
-    # Create a colored overlay for each segment with transparency
+    # Create a coloured overlay for each segment with transparency
     segment_vis = processed_image.copy()
     segment_overlay = np.zeros_like(processed_image)
 
@@ -412,11 +412,11 @@ def visualize_border_analysis(
                 segment_mask[y, x] = 1
 
         if is_counted:
-            color = [0, 255, 0]  # Green (counted in score)
+            colour = [0, 255, 0]  # Green (counted in score)
         else:
-            color = [255, 0, 0]  # Red (not counted in score)
+            colour = [255, 0, 0]  # Red (not counted in score)
 
-        segment_overlay[segment_mask > 0] = color
+        segment_overlay[segment_mask > 0] = colour
 
         # Add segment number label at mid-angle
         mid_angle = (start_angle + end_angle) / 2
@@ -456,14 +456,14 @@ def visualize_border_analysis(
 
     for result in segment_results:
         segment_ids.append(f"Seg {result['segment_id']+1}")
-        contrast_values.append(result.get("color_contrast", 0))
+        contrast_values.append(result.get("colour_contrast", 0))
         irregularity_values.append(result.get("irregularity", 0))
 
     # Bar chart for feature comparison
     x = np.arange(len(segment_ids))
     width = 0.4
 
-    axes[1, 1].bar(x - width / 2, contrast_values, width, color="lightgreen", label="Color Contrast")
+    axes[1, 1].bar(x - width / 2, contrast_values, width, color="lightgreen", label="Colour Contrast")
     axes[1, 1].bar(x + width / 2, irregularity_values, width, color="plum", label="Border Irregularity")
 
     # Add threshold lines

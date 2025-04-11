@@ -31,7 +31,7 @@ def classify_lesion(tds: float) -> str:
 
 
 def analyze_abcd_features(
-    image_path: Path, mask_path: Path, *, show_graph: bool = False
+    image_path: Path, mask_path: Path, *, show_graph: bool = False, only_show_end_graph: bool = False
 ) -> dict[str, float | int]:
     """Analyze the ABCD features of a given lesion image and its mask.
 
@@ -39,6 +39,7 @@ def analyze_abcd_features(
         image_path: Path to the lesion image.
         mask_path: Path to the binary mask of the lesion.
         show_graph: Whether to display the analysis graphically.
+        only_show_end_graph: Whether to show the graph only at the end of the analysis.
 
     Returns:
         A dictionary containing the scores for asymmetry, border, colour, dermoscopic structure,
@@ -75,7 +76,9 @@ def analyze_abcd_features(
     print("Calculating colour score...")
     colour_score = calculate_colour_score(image.copy(), mask.copy(), show_graph=show_graph)
     print("Calculating dermoscopic structure score...")
-    dermoscopic_structure_score = calculate_dermoscopic_structure_score(image.copy(), mask.copy(), show_graph=show_graph)
+    dermoscopic_structure_score = calculate_dermoscopic_structure_score(
+        image.copy(), mask.copy(), show_graph=show_graph
+    )
 
     # Calculate TDS (Total Dermascopic Score)
     # TDS = (A × 1.3) + (B × 0.1) + (C × 0.5) + (D × 0.5)
@@ -91,7 +94,7 @@ def analyze_abcd_features(
         "tds": tds,
     }
 
-    if show_graph:
+    if show_graph or only_show_end_graph:
         # Visualize the results
         visualize_abcd_analysis(image_path, mask_path, result)
 
@@ -106,16 +109,44 @@ def visualize_abcd_analysis(image_path: Path, mask_path: Path, results: dict[str
         mask_path: Path to the binary mask of the lesion.
         results: Dictionary containing the ABCD scores.
     """
-    image = np.array(Image.open(image_path).convert("RGB"))
-    mask = np.array(Image.open(mask_path).convert("L"))
+    # Load image and mask as PIL Images first
+    original_image = Image.open(image_path).convert("RGB")
+    original_mask = Image.open(mask_path).convert("L")
+
+    # Get original dimensions
+    img_width, img_height = original_image.size
+
+    # Define maximum dimensions for visualization
+    max_width, max_height = 400, 300
+
+    # Calculate new dimensions while maintaining aspect ratio
+    aspect_ratio = img_width / img_height
+
+    if aspect_ratio > 1:
+        new_width = min(img_width, max_width)
+        new_height = int(new_width / aspect_ratio)
+    else:
+        new_height = min(img_height, max_height)
+        new_width = int(new_height * aspect_ratio)
+
+    # Resize images for visualization
+    image = np.array(original_image.resize((new_width, new_height), Image.LANCZOS))
+    mask = np.array(original_mask.resize((new_width, new_height), Image.NEAREST))
     mask = (mask > 0).astype(np.float32)
 
     # Create image overlay
     overlay = image.copy()
     overlay[mask > 0] = overlay[mask > 0] * 0.7 + np.array([255, 0, 0]) * 0.3
 
+    # Get file name and classification
+    file_name = image_path.name
+    classification = classify_lesion(results["tds"])
+
     # Create figure
     fig, ax = plt.subplots(1, 2, figsize=(12, 6))
+
+    # Add a title to the figure with file name and classification
+    fig.suptitle(f"File: {file_name} - Classification: {classification}", fontsize=14)
 
     # Plot original image with overlay
     ax[0].imshow(image)
@@ -134,12 +165,12 @@ def visualize_abcd_analysis(image_path: Path, mask_path: Path, results: dict[str
         f"B: {results['border']:.2f} (Border) | "
         f"C: {results['colour']:.2f} (Colour) | "
         f"D: {results['dermoscopic_structure']:.2f} (Dermoscopic Structure) | "
-        f"TDS: {results['tds']:.2f}",
+        f"TDS: {results['tds']:.2f} ({classification})",
         ha="center",
         fontsize=12,
         bbox={"facecolor": "white", "alpha": 0.8, "pad": 5},
     )
 
     plt.tight_layout()
-    plt.subplots_adjust(bottom=0.15)
+    plt.subplots_adjust(top=0.9, bottom=0.15)
     plt.show()

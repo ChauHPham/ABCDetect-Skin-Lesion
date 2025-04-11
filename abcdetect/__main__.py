@@ -155,7 +155,12 @@ def segment_image(
 
 
 def analyze_image(
-    image_path: Path, model_path: Path, output_dir: Path, device: torch.device, show_graph: bool = False
+    image_path: Path,
+    model_path: Path,
+    output_dir: Path,
+    device: torch.device,
+    show_graph: bool = False,
+    only_show_end_graph: bool = False,
 ) -> None:
     """Segment an image and perform ABCD analysis on it.
 
@@ -165,14 +170,17 @@ def analyze_image(
         output_dir: Directory to save temporary files.
         device: Device to use for segmentation (CPU or GPU).
         show_graph: If True, display visualizations.
+        only_show_end_graph: If True, show the graph only at the end of the analysis.
     """
-    print(f"Analyzing image {image_path} using model {model_path}")
+    print(f"Analyzing image {image_path.name} using model {model_path.name}")
 
     # Segment the image
     mask_path = segment_single_image(image_path, model_path, output_dir, device=device, show_graph=show_graph)
 
     # Perform ABCD analysis
-    results = analyze_abcd_features(image_path, mask_path, show_graph=show_graph)
+    results = analyze_abcd_features(
+        image_path, mask_path, show_graph=show_graph, only_show_end_graph=only_show_end_graph
+    )
 
     # Classify the lesion
     classification = classify_lesion(results["tds"])
@@ -185,7 +193,7 @@ def analyze_image(
     print(f"Dermoscopic structure score: {results['dermoscopic_structure']:.2f}")
     print(f"Total Dermoscopic Score (TDS): {results['tds']:.2f}")
     print(f"Classification: {classification}")
-    print("=================================\n")
+    print("=================================")
 
     # Save a copy of the results to the output directory
     result_file = output_dir / f"{image_path.stem}_analysis_results.txt"
@@ -204,7 +212,11 @@ def analyze_image(
 
 
 def analyze_multiple_images(
-    image_paths: list[Path], model_path: Path, output_dir: Path, device: torch.device
+    image_paths: list[Path],
+    model_path: Path,
+    output_dir: Path,
+    device: torch.device,
+    only_show_end_graph: bool = False,
 ) -> None:
     """Segment and analyze multiple images using ABCD criteria.
 
@@ -213,15 +225,23 @@ def analyze_multiple_images(
         model_path: Path to the trained segmentation model.
         output_dir: Directory to save analysis results.
         device: Device to use for segmentation (CPU or GPU).
+        only_show_end_graph: If True, show the graph only at the end of the analysis.
     """
     print(f"\n===== Analyzing {len(image_paths)} images =====")
 
     for image_path in image_paths:
-        print(f"\nProcessing image: {image_path.name}")
         try:
-            analyze_image(image_path, model_path, output_dir, device, show_graph=False)
+            analyze_image(
+                image_path,
+                model_path,
+                output_dir,
+                device,
+                show_graph=False,
+                only_show_end_graph=only_show_end_graph,
+            )
         except Exception as e:
             from traceback import format_exc
+
             print(format_exc())
             print(f"Error analyzing {image_path.name}: {str(e)}")
 
@@ -397,7 +417,7 @@ def main() -> None:
                 device=device,
                 batch_size=args.batch_size,
                 num_workers=args.num_workers,
-                show_graph=True,
+                show_graph=args.show_graph,
             )
 
             if segmentation_model_path is None:
@@ -405,7 +425,10 @@ def main() -> None:
                 sys.exit(1)
 
         # Evaluate the model
-        evaluate_segmentation_model(ham10k_image_path, ham10k_masks_path, segmentation_model_path, device=device)
+        if args.show_graph:
+            evaluate_segmentation_model(
+                ham10k_image_path, ham10k_masks_path, segmentation_model_path, device=device
+            )
 
         # Analyze demo images
         demo_dir = Path(__file__).parent.parent / "demo"
@@ -413,7 +436,9 @@ def main() -> None:
             demo_images = list(demo_dir.glob("*.jpg")) + list(demo_dir.glob("*.png"))
             if demo_images:
                 print(f"\nFound {len(demo_images)} demo images to analyze")
-                analyze_multiple_images(demo_images, segmentation_model_path, output_dir, device)
+                analyze_multiple_images(
+                    demo_images, segmentation_model_path, output_dir, device, only_show_end_graph=args.show_graph
+                )
             else:
                 print(f"\nNo demo images found in {demo_dir}")
         else:

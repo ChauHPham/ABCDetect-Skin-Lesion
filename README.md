@@ -41,7 +41,7 @@ ABCDetect automates this analysis by first segmenting the lesion and then quanti
 Run a complete demonstration of the project with dataset download, model training, and evaluation:
 
 ```bash
-python -m abcdetect demo
+python -m abcdetect demo --show-graph
 ```
 
 To analyze a single skin lesion image using a pre-trained model and visualize the ABCD analysis:
@@ -126,7 +126,7 @@ python -m abcdetect download
 python -m abcdetect train --batch-size 48 --device cuda
 
 # 3. Evaluate the model on the test set (optional)
-python -m abcdetect demo
+python -m abcdetect demo --show-graph
 
 # 4. To analyze a specific image using the trained model with visualization
 python -m abcdetect analyze --image path/to/test_image.jpg --show-graph
