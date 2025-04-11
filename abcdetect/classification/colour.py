@@ -5,7 +5,7 @@ from skimage import color
 from typing import Tuple, Dict
 
 def calculate_colour_score(image: np.ndarray, mask: np.ndarray, *, show_graph: bool = False) -> int:
-    """Calculate the colour score for the lesion according to ABCD rule using relative Lab comparison.
+    """Calculate the colour score for the lesion according to ABCD rule using Lab ΔE distance.
 
     Args:
         image: RGB image of the lesion as a NumPy array.
@@ -23,44 +23,45 @@ def calculate_colour_score(image: np.ndarray, mask: np.ndarray, *, show_graph: b
     if lesion_area == 0:
         return 1
 
-    # Compute border skin reference using dilation
+    # Compute skin reference via dilation
     kernel = np.ones((15, 15), np.uint8)
     dilated_mask = cv2.dilate(lesion_mask, kernel, iterations=1)
     skin_mask = dilated_mask - lesion_mask
 
-    # Convert to Lab space
     image_lab = color.rgb2lab(image / 255.0)
 
-    # Get mean Lab values for skin
     if np.sum(skin_mask) > 0:
         skin_lab = image_lab[skin_mask > 0]
         skin_mean = np.mean(skin_lab, axis=0)
     else:
-        skin_mean = np.array([75, 0, 0])  # Fallback neutral light skin
+        skin_mean = np.array([75, 0, 0])
 
-    # Compute Lab difference image (ΔE from skin tone)
-    delta_e = np.linalg.norm(image_lab - skin_mean, axis=2)
-
-    # Create masks for lesion only
-    lesion_lab = image_lab[lesion_mask > 0]
-    delta_e_lesion = delta_e[lesion_mask > 0]
-
-    # Define reference Lab values for ABCD colors (approximate)
+    # Reference Lab values (estimated from color schematic)
     ref_colors = {
-        "white": np.array([95, 0, 0]),
-        "red": np.array([53, 80, 67]),
-        "light brown": np.array([65, 15, 25]),
-        "dark brown": np.array([40, 15, 20]),
-        "blue-gray": np.array([35, 0, -30]),
-        "black": np.array([15, 0, 0]),
+        "white":       np.array([95, 0, 0]),
+        "red":         np.array([53, 75, 50]),
+        "light brown": np.array([70, 15, 25]),
+        "dark brown":  np.array([40, 10, 15]),
+        "blue-gray":   np.array([40, 0, -35]),
+        "black":       np.array([10, 0, 0]),
     }
 
-    min_percentage = 3.0
+    # ΔE calculation
+    lesion_lab = image_lab[lesion_mask > 0]
+    min_percentage = 0.5
+    delta_thresh = 25
     detected_colors = {}
 
     for color_name, ref_lab in ref_colors.items():
-        delta = np.linalg.norm(lesion_lab - ref_lab, axis=1)
-        match_mask = (delta < 20)  # ΔE threshold for perceptual similarity
+        delta_e = np.linalg.norm(lesion_lab - ref_lab, axis=1)
+
+        if color_name == "white":
+            # Only count as white if L* significantly higher than skin
+            is_lighter = lesion_lab[:, 0] > (skin_mean[0] + 10)
+            match_mask = (delta_e < delta_thresh) & is_lighter
+        else:
+            match_mask = delta_e < delta_thresh
+
         percent = (np.sum(match_mask) / lesion_area) * 100
         if percent >= min_percentage:
             detected_colors[color_name] = percent
@@ -72,8 +73,8 @@ def calculate_colour_score(image: np.ndarray, mask: np.ndarray, *, show_graph: b
     color_score = len(detected_colors)
 
     print(f"\nDetected {color_score} colors in the lesion:")
-    for color_name, percentage in detected_colors.items():
-        print(f"  - {color_name}: {percentage:.2f}%")
+    for cname, pct in detected_colors.items():
+        print(f"  - {cname}: {pct:.2f}%")
 
     if show_graph:
         fig = plt.figure(figsize=(15, 6))
@@ -82,13 +83,12 @@ def calculate_colour_score(image: np.ndarray, mask: np.ndarray, *, show_graph: b
         ax1.set_title("Original Image")
         ax1.axis("off")
 
-        for i, (color_name, _) in enumerate(detected_colors.items(), 1):
-            ref_lab = ref_colors[color_name]
-            lab_patch = np.ones((50, 50, 3)) * ref_lab
-            rgb_patch = color.lab2rgb(lab_patch)
+        for i, cname in enumerate(detected_colors, 1):
+            patch_lab = np.ones((50, 50, 3)) * ref_colors[cname]
+            rgb_patch = color.lab2rgb(patch_lab)
             ax = fig.add_subplot(1, len(detected_colors) + 1, i + 1)
             ax.imshow(rgb_patch)
-            ax.set_title(color_name)
+            ax.set_title(cname)
             ax.axis("off")
 
         plt.tight_layout()
