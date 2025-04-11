@@ -100,7 +100,7 @@ def detect_dots_and_globules(gray_img, mask, image, *, save_vis_path=None, show_
             if mm2_to_pixels(0.008) <= area < mm2_to_pixels(0.1):
                 dots += 1
                 cv2.circle(vis_img, (int(x + w / 2), int(y + h / 2)), int(max(w, h) / 2), (0, 255, 0), 2)  # Green
-            elif mm2_to_pixels(0.1) <= area < mm2_to_pixels(2.5):
+            elif mm2_to_pixels(0.2) <= area < mm2_to_pixels(2.5):
                 globules += 1
                 cv2.circle(vis_img, (int(x + w / 2), int(y + h / 2)), int(max(w, h) / 2), (0, 0, 255), 2)  # Red
 
