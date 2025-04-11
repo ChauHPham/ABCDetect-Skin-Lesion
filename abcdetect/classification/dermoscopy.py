@@ -269,16 +269,12 @@ def apply_filter_bank(gray_image, angles=np.linspace(-90, 90, 12, endpoint=False
     Returns:
         max_response (ndarray): Max filter response across orientations
     """
-    responses = []
+    gray_float = gray_image.astype(np.float32)
 
-    for angle in angles:
-        kernel = build_directional_dog_kernel(angle, size=kernel_size)
-        response = convolve(gray_image.astype(np.float32), kernel)
-        responses.append(response)
+    kernels = [build_directional_dog_kernel(angle, size=kernel_size) for angle in angles]
+    responses = [cv2.filter2D(gray_float, -1, kernel) for kernel in kernels]
 
-    # Combine all directional responses
-    max_response = np.max(responses, axis=0)
-    return max_response
+    return np.maximum.reduce(responses)
 
 def prune_by_shape(binary_mask, ecc_thresh=0.95, solidity_thresh=0.5):
     """
@@ -343,12 +339,13 @@ def count_graph_edges_and_nodes(skeleton_mask):
 def hair_and_obstruction_removal(image, mask, kernel_sizes=[21]):
     # Build directional filter responses for detecting hair
     responses = [apply_filter_bank(image, kernel_size=size) for size in kernel_sizes]
-    stacked = np.stack(responses, axis=-1)
 
-    # Detect hair by thresholding max response
-    max_response = np.max(stacked, axis=-1)
-    max_response = normalize(max_response, np.min(max_response), np.max(max_response))
-    thresh_val = threshold_otsu(max_response[mask])
+    if len(responses) == 1:
+        max_response = responses[0]
+    else:
+        max_response = np.maximum.reduce(responses)
+
+    thresh_val = threshold_otsu(max_response[mask > 0])
     hair_mask = (max_response > thresh_val).astype(np.uint8)
 
     # Inpaint the green channel to remove detected hair
@@ -463,10 +460,8 @@ def detect_streaks(gray: np.ndarray, mask: np.ndarray, min_streak_area=5, min_br
 
     # Define border band width (one third of minor axis, at least a minimum)
     band_width = max(int(minor_axis_length / 3), 5)  # at least 5 px
-    selem = disk(band_width)  # circular structuring element
-
-    # Erode the lesion mask to get inner mask
-    inner_mask = erosion(mask, selem)
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (band_width * 2 + 1, band_width * 2 + 1))
+    inner_mask = cv2.erode(mask.astype(np.uint8), kernel)
 
     # Border band: pixels in mask but not in inner_mask
     border_band = binary_mask - inner_mask
@@ -477,7 +472,7 @@ def detect_streaks(gray: np.ndarray, mask: np.ndarray, min_streak_area=5, min_br
     roi_inverted = cv2.bitwise_not(roi)  # invert grayscale: dark→light
 
     # Apply Frangi filter to enhance line structures
-    line_prob = frangi(roi_inverted, scale_range=(1, 5), scale_step=1, beta=0.5, alpha=15)
+    line_prob = frangi(roi_inverted, sigmas=range(1, 6), beta=0.5, alpha=15)
 
     # Remove line from border
     line_prob = line_prob * erosion(border_band, disk(5))
@@ -513,7 +508,7 @@ def detect_streaks(gray: np.ndarray, mask: np.ndarray, min_streak_area=5, min_br
                 overlay[int(y), int(x)] = 255
 
     if show_graph:
-        fig, axes = plt.subplots(1, 8, figsize=(18, 4))
+        fig, axes = plt.subplots(1, 5, figsize=(18, 4))
         fig.suptitle("Streak Detection Pipeline", fontsize=16)
 
         axes[0].imshow(gray); axes[0].set_title("Original"); axes[0].axis('off')
@@ -528,13 +523,17 @@ def detect_streaks(gray: np.ndarray, mask: np.ndarray, min_streak_area=5, min_br
     return len(valid_streaks) > 3, overlay
         
 def compute_dermoscopic_score(image: np.ndarray, mask: np.ndarray, save_vis_path: str = None, show_graph: bool = False) -> dict:
+    CAPPED_IMAGE_HEIGHT = 192
+    CAPPED_IMAGE_WIDTH = 256
+
     """Compute dermoscopic structure score (Part D of ABCD rule)."""
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
     # Ensure that the mask and the image have the same size
-    target_shape = (mask.shape[1], mask.shape[0])  # width, height
+    target_shape = (CAPPED_IMAGE_WIDTH, CAPPED_IMAGE_HEIGHT)
     image = cv2.resize(image, target_shape)
     gray = cv2.resize(gray, target_shape)
+    mask = cv2.resize(mask, target_shape)
 
     # --- Feature Detection ---
     has_dots, has_globules, vis_img = detect_dots_and_globules(gray, mask, image, save_vis_path=save_vis_path, show_graph=show_graph)
