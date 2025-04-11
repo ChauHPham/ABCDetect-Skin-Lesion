@@ -25,6 +25,11 @@ def calculate_border_score(image: np.ndarray, mask: np.ndarray, *, show_graph: b
         target_shape = (mask.shape[1], mask.shape[0])
         image = cv2.resize(image, target_shape)
 
+    # Shrink image and mask 
+    # new_shape = (600, 450)
+    # image = cv2.resize(image, new_shape)
+    # mask = cv2.resize(mask, new_shape)
+
     # Expand binary mask to 3 channels
     binary_mask = mask > 0.5
     binary_mask_3c = np.repeat(binary_mask[:, :, np.newaxis], 3, axis=2)
