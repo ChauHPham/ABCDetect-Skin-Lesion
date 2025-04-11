@@ -321,8 +321,8 @@ def count_graph_edges_and_nodes(skeleton_mask):
     num_edges = G.number_of_edges()
     return num_nodes, num_edges
 
-def detect_pigment_networks(image: np.ndarray, mask: np.ndarray, save_vis_path: str = None, show_graph=False):
-    binary_mask = mask > 0.5
+def detect_pigment_networks(image: np.ndarray, mask: np.ndarray, save_vis_path: str = None, composite_score_threshold:float = 0.1, show_graph=False):
+    binary_mask = mask > 0
     green_channel = image[:, :, 1]  # Use the green channel for better contrast
     masked_green_channel = green_channel * binary_mask  # Apply lesion mask
 
@@ -365,11 +365,8 @@ def detect_pigment_networks(image: np.ndarray, mask: np.ndarray, save_vis_path: 
         plt.tight_layout()
         plt.show()
 
-        print(f"Vertices: {V}, Edges: {E}, Skeleton length: {np.sum(optimal_mask)}, Lesion area: {np.sum(binary_mask)}")
-        print(f"Structure ratio: {structure_ratio:.4f}, Length ratio: {length_ratio:.4f}, Composite score: {composite_score:.6f}")
-
     # Decide if a pigment network is present
-    return composite_score >= 0.1, optimal_mask
+    return composite_score >= composite_score_threshold, optimal_mask
 
 def compute_dermoscopic_score(image: np.ndarray, mask: np.ndarray, save_vis_path: str = None, show_graph: bool = False) -> dict:
     """Compute dermoscopic structure score (Part D of ABCD rule)."""
@@ -383,19 +380,32 @@ def compute_dermoscopic_score(image: np.ndarray, mask: np.ndarray, save_vis_path
     # --- Feature Detection ---
     has_dots, has_globules, vis_img = detect_dots_and_globules(gray, mask, image, save_vis_path=save_vis_path, show_graph=show_graph)
     has_structureless, vis_img = detect_structureless_areas(gray, mask, vis_img, save_vis_path=save_vis_path , show_graph=show_graph)
+    has_pigment_network, vis_img = detect_pigment_networks(image, mask, save_vis_path=save_vis_path)
 
     # Not implemented yet
-    has_pigment_network = None
     has_streaks = None
 
     # Final scoring (0.5 points per feature present)
     present_features = sum([
         int(has_dots),
         int(has_globules),
-        0,  # pigment network
+        int(has_pigment_network),  # pigment network
         0,  # streaks
         int(has_structureless)
     ])
+
+    dermoscopy_score_dict = {
+        "dots": has_dots,
+        "globules": has_globules,
+        "structureless_areas": has_structureless,
+        "pigment_network": has_pigment_network,
+        "streaks": has_streaks,
+        "D_score": present_features
+    }
+
+    print(f"Total Dermoscopy Scores: {present_features}")
+    for key, var in dermoscopy_score_dict.items():
+        print(f"Score for {key}: {var}")
 
     # Save visualization if requested
     if save_vis_path:
