@@ -521,24 +521,34 @@ def detect_streaks(gray: np.ndarray, mask: np.ndarray, min_streak_area=5, min_br
         plt.show()
 
     return len(valid_streaks) > 3, overlay
-        
+
+MAX_SIDE = 256
+
+def resize_cap(img):
+    h, w = img.shape[:2]
+
+    if h > w:                          
+        new_h, new_w = MAX_SIDE, int(w * MAX_SIDE / h)
+    else:                              
+        new_w, new_h = MAX_SIDE, int(h * MAX_SIDE / w)
+
+    return cv2.resize(img, (new_w, new_h),
+                      interpolation=cv2.INTER_NEAREST if img.ndim == 2 else cv2.INTER_AREA)
+
 def compute_dermoscopic_score(image: np.ndarray, mask: np.ndarray, save_vis_path: str = None, show_graph: bool = False) -> dict:
-    CAPPED_IMAGE_HEIGHT = 192
-    CAPPED_IMAGE_WIDTH = 256
 
     """Compute dermoscopic structure score (Part D of ABCD rule)."""
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
     # Ensure that the mask and the image have the same size
-    target_shape = (CAPPED_IMAGE_WIDTH, CAPPED_IMAGE_HEIGHT)
-    image = cv2.resize(image, target_shape)
-    gray = cv2.resize(gray, target_shape)
-    mask = cv2.resize(mask, target_shape)
+    image = resize_cap(image)
+    gray = resize_cap(gray)
+    mask = resize_cap(mask)
 
     # --- Feature Detection ---
     has_dots, has_globules, vis_img = detect_dots_and_globules(gray, mask, image, save_vis_path=save_vis_path, show_graph=show_graph)
     has_structureless, vis_img = detect_structureless_areas(gray, mask, vis_img, save_vis_path=save_vis_path , show_graph=show_graph)
-    has_pigment_network, vis_img = detect_pigment_networks(image, mask, save_vis_path=save_vis_path)
+    has_pigment_network, vis_img = detect_pigment_networks(image, mask, save_vis_path=save_vis_path, show_graph=show_graph)
     has_streaks, vis_img = detect_streaks(gray, mask, show_graph=show_graph)
 
     # Final scoring (0.5 points per feature present)
