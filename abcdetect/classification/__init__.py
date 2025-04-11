@@ -50,7 +50,7 @@ def analyze_abcd_features(
     mask = np.array(Image.open(mask_path).convert("L"))
 
     # Resize images to improve processing speed
-    max_width, max_height = 400, 300
+    max_width, max_height = 600, 450
     img_height, img_width = image.shape[:2]
     aspect_ratio = img_width / img_height
 
