@@ -97,10 +97,10 @@ def detect_dots_and_globules(gray_img, mask, image, *, save_vis_path=None, show_
 
         if is_circular and is_squareish:
         # Only now check for size and classify
-            if mm2_to_pixels(0.1) <= area < mm2_to_pixels(0.5):
+            if mm2_to_pixels(0.008) <= area < mm2_to_pixels(0.1):
                 dots += 1
                 cv2.circle(vis_img, (int(x + w / 2), int(y + h / 2)), int(max(w, h) / 2), (0, 255, 0), 2)  # Green
-            elif mm2_to_pixels(0.5) <= area < mm2_to_pixels(2.5):
+            elif mm2_to_pixels(0.1) <= area < mm2_to_pixels(2.5):
                 globules += 1
                 cv2.circle(vis_img, (int(x + w / 2), int(y + h / 2)), int(max(w, h) / 2), (0, 0, 255), 2)  # Red
 
@@ -124,7 +124,7 @@ def detect_dots_and_globules(gray_img, mask, image, *, save_vis_path=None, show_
         axes[3].set_title("Detected Dots/Globules")
         axes[3].axis('off')
 
-        # ✅ Add legend inside the last subplot
+        # Add legend inside the last subplot
         red_patch = mpatches.Patch(color='red', label='Globules')
         green_patch = mpatches.Patch(color='green', label='Dots')
         axes[3].legend(handles=[green_patch, red_patch], loc='lower right', fontsize='small', frameon=True)
