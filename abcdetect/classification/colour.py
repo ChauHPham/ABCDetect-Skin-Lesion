@@ -46,6 +46,9 @@ def calculate_colour_score(
     if image.shape[:2] != mask.shape[:2]:
         image = cv2.resize(image, (mask.shape[1], mask.shape[0]))
 
+    # Blur the image to avoid capturing hair and noise
+    image = cv2.GaussianBlur(image, ksize=(9,9), sigmaX=5)
+
     # --- 2. Create lesion and skin masks -----------------------------------------
     lesion_mask = (mask > 0).astype(np.uint8)
     if lesion_mask.sum() == 0:
