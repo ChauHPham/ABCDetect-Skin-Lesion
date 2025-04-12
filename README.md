@@ -145,8 +145,8 @@ If you prefer to skip the training process, you can use our pre-trained model av
 
 1. Visit [our Hugging Face repository](https://huggingface.co/ColwynAIWiz/LesionSegmentation/tree/main)
    > **NOTE: You will need a Hugging Face account to download the model.**
-3. Download the latest `.pt` model file (the one with the most recent timestamp)
-4. Use the model for ABCD analysis/segment/demo:
+2. Download the latest `.pt` model file (the one with the most recent timestamp)
+3. Use the model for ABCD analysis/segment/demo:
 
 ```bash
 # Specify the model path directly with --model
