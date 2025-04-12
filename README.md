@@ -20,7 +20,7 @@ The ABCD rule is a clinical algorithm used by dermatologists to evaluate suspici
 ABCDetect automates this analysis by first segmenting the lesion and then quantifying each ABCD feature to calculate a Total Dermoscopic Score (TDS), which can help classify the lesion as benign, suspicious, or likely malignant.
 
 ## Video/demo/GIF
-[Add your project demo video or GIF here - 1:40 to 2 minutes maximum]
+https://drive.google.com/file/d/1KuKjS7i70OPOy5zqHXcjzu_l7hwtBvab/view
 
 
 ## Table of Contents
