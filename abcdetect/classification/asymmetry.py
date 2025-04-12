@@ -680,8 +680,16 @@ def visualize_shape_asymmetry(
     ax[1, 1].set_title("Difference Areas")
     ax[1, 1].axis("off")
 
+    # First adjust the subplot layout
+    plt.tight_layout()
+    
+    # Then add the suptitle with enough space
+    fig.suptitle(f"Shape Asymmetry Analysis", fontsize=16, y=0.98)
+    
+    # Adjust layout parameters to make room for titles and text
+    plt.subplots_adjust(hspace=0.3, wspace=0.1, bottom=0.08, top=0.9)
+    
     # Add metrics as text
-    fig.suptitle(f"Shape Asymmetry Analysis", fontsize=16)
     fig.text(
         0.5,
         0.02,
@@ -690,8 +698,6 @@ def visualize_shape_asymmetry(
         fontsize=12,
     )
 
-    plt.tight_layout()
-    plt.subplots_adjust(hspace=0.3, wspace=0.1, bottom=0.08)
     plt.show()
 
 
@@ -759,8 +765,16 @@ def visualize_colour_asymmetry(
         ax[1, i].set_xlim(-0.5, color_bins - 0.5)
         ax[1, i].legend()
 
+    # First adjust the subplot layout
+    plt.tight_layout()
+    
+    # Then add the suptitle with enough space
+    fig.suptitle(f"Colour Asymmetry Analysis", fontsize=16, y=0.98)
+    
+    # Adjust layout parameters to make room for titles and text
+    plt.subplots_adjust(hspace=0.3, wspace=0.1, bottom=0.15, top=0.9)
+    
     # Add metrics as text
-    fig.suptitle(f"Colour Asymmetry Analysis", fontsize=16)
     fig.text(
         0.5,
         0.05,
@@ -770,8 +784,6 @@ def visualize_colour_asymmetry(
         fontsize=12,
     )
 
-    plt.tight_layout()
-    plt.subplots_adjust(hspace=0.3, wspace=0.1, bottom=0.15)
     plt.show()
 
 
@@ -854,8 +866,16 @@ def visualize_texture_asymmetry(
     ax[1, 2].set_title("Feature Differences")
     ax[1, 2].legend()
 
+    # First adjust the subplot layout
+    plt.tight_layout()
+    
+    # Then add the suptitle with enough space
+    fig.suptitle("Texture Asymmetry Analysis", fontsize=16, y=0.98)
+    
+    # Adjust layout parameters to make room for titles and text
+    plt.subplots_adjust(hspace=0.3, wspace=0.1, bottom=0.15, top=0.9)
+    
     # Add metrics as text
-    fig.suptitle("Texture Asymmetry Analysis", fontsize=16)
     fig.text(
         0.5,
         0.05,
@@ -865,6 +885,4 @@ def visualize_texture_asymmetry(
         fontsize=12,
     )
 
-    plt.tight_layout()
-    plt.subplots_adjust(hspace=0.3, wspace=0.1, bottom=0.15)
     plt.show()
