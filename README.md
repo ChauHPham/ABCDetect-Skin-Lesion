@@ -44,7 +44,9 @@ Run a complete demonstration of the project with dataset download, model trainin
 python -m abcdetect demo --show-graph
 ```
 
-To analyze a single skin lesion image using a pre-trained model and visualize the ABCD analysis:
+> **NOTE: If you wish to use a pre-trained model without training your own model, see *[Using Pre-trained Model](#pretrained)*.**
+
+To analyze a single skin lesion image and visualize the ABCD analysis:
 
 ```bash
 python -m abcdetect analyze --image /path/to/your/image.jpg --show-graph
@@ -142,11 +144,12 @@ You can change these locations using the `--datasets-dir` and `--output-dir` opt
 If you prefer to skip the training process, you can use our pre-trained model available on Hugging Face:
 
 1. Visit [our Hugging Face repository](https://huggingface.co/ColwynAIWiz/LesionSegmentation/tree/main)
-2. Download the latest `.pt` model file (the one with the most recent timestamp)
-3. Use the model for ABCD analysis:
+   - You will need a Hugging Face account
+3. Download the latest `.pt` model file (the one with the most recent timestamp)
+4. Use the model for ABCD analysis/segment/demo:
 
 ```bash
-# Specify the model path directly
+# Specify the model path directly with --model
 python -m abcdetect analyze --model path/to/downloaded/model.pt --image path/to/your/image.jpg --show-graph
 
 # OR place the model in your output directory and it will be used automatically
