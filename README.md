@@ -36,15 +36,10 @@ ABCDetect automates this analysis by first segmenting the lesion and then quanti
 
 
 <a name="demo"></a>
-## 1. Example demo
 
-Run a complete demonstration of the project with dataset download, model training, and evaluation:
+## 1. Perform ABCD detection on a single image
 
-```bash
-python -m abcdetect demo --show-graph
-```
-
-> **NOTE: If you wish to use a pre-trained model without training your own model, see *[Using Pre-trained Model](#pretrained)*.**
+> **NOTE: To use a pre-trained model without training your own model, see *[Using Pre-trained Model](#pretrained)*.**
 
 To analyze a single skin lesion image and visualize the ABCD analysis:
 
@@ -52,6 +47,13 @@ To analyze a single skin lesion image and visualize the ABCD analysis:
 python -m abcdetect analyze --image /path/to/your/image.jpg --show-graph
 ```
 
+## 2. Training a model and performing a demonstration of the ABCD detection
+Run a complete demonstration of the project with dataset download, model training, and evaluation:
+
+```bash
+python -m abcdetect demo --show-graph
+```
+## 2. Training a model only
 For segmentation only without ABCD analysis:
 
 ```bash
