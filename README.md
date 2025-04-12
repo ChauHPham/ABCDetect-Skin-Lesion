@@ -37,10 +37,9 @@ ABCDetect automates this analysis by first segmenting the lesion and then quanti
 
 <a name="demo"></a>
 
-## 1. Perform ABCD detection on a single image
+**NOTE: If you wish save time and use a pre-trained model, see *[Using Pre-trained Model](#pretrained)*.**
 
-> **NOTE: To use a pre-trained model without training your own model, see *[Using Pre-trained Model](#pretrained)*.**
-
+# Performing ABCD detection on a single image
 To analyze a single skin lesion image and visualize the ABCD analysis:
 
 ```bash
@@ -146,9 +145,9 @@ You can change these locations using the `--datasets-dir` and `--output-dir` opt
 If you prefer to skip the training process, you can use our pre-trained model available on Hugging Face:
 
 1. Visit [our Hugging Face repository](https://huggingface.co/ColwynAIWiz/LesionSegmentation/tree/main)
-   - You will need a Hugging Face account
-3. Download the latest `.pt` model file (the one with the most recent timestamp)
-4. Use the model for ABCD analysis/segment/demo:
+   > **NOTE: You will need a Hugging Face account to download the model.**
+2. Download the latest `.pt` model file (the one with the most recent timestamp)
+3. Use the model for ABCD analysis/segment/demo:
 
 ```bash
 # Specify the model path directly with --model
