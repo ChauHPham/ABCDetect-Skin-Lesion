@@ -27,7 +27,6 @@ Video Link: https://drive.google.com/file/d/1KuKjS7i70OPOy5zqHXcjzu_l7hwtBvab/vi
 ![ytdmsrm](https://github.com/user-attachments/assets/9986efb6-53f6-4767-baa4-966b83712948)
 ![sbsdeberb](https://github.com/user-attachments/assets/6929b4c4-99c3-451e-9729-e18fcb19bafe)
 ![htrjnrj4st](https://github.com/user-attachments/assets/a6695c7f-8fdd-4ad8-8b3f-c50ce2927846)
-![sbsdeberb](https://github.com/user-attachments/assets/1953942c-9ad1-4513-9866-d3dd532ff38d)
 ![tyl,tukty](https://github.com/user-attachments/assets/0ec08bb8-731e-44e2-bdaf-ebdef024249c)
 ![fmfgnmd](https://github.com/user-attachments/assets/c0a21ccc-0bf6-49f1-b40a-c86c2b3ccf60)
 ![bvhfjngn](https://github.com/user-attachments/assets/204e1de3-ef44-4540-a03a-a4a0a1b048de)
