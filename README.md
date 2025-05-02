@@ -1,4 +1,4 @@
-# SFU CMPT 419 Project -- ABCDetect
+# ABCDetect
 **ABCDetect**: Automated Boundary Classification and Detection for Skin Lesions
 
 ABCDetect is a tool for skin lesion segmentation and classification using deep learning. It helps identify potential melanoma boundaries from dermoscopic images and performs automated ABCD rule analysis to assist in diagnosis.
