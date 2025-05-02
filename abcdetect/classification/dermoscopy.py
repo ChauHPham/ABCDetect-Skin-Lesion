@@ -444,83 +444,89 @@ def get_valid_streaks(skeleton, radial_streaks, min_streak_area, min_branch_poin
     
     return valid_streaks
 
-def detect_streaks(gray: np.ndarray, mask: np.ndarray, min_streak_area=5, min_branch_points=2, show_graph=False):
+def detect_streaks(image: np.ndarray, gray: np.ndarray, mask: np.ndarray, min_streak_area=5, min_branch_points=2, show_graph=False):
     binary_mask = mask > 0
 
     # STEP 1: PREPROCESSING
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     gray = clahe.apply(gray)
-
-    # Median filtering to reduce noise
     gray = cv2.medianBlur(gray, ksize=3)
 
-    # Compute lesion mask properties (using skimage)
     props = regionprops(mask.astype(int))
-    minor_axis_length = props[0].minor_axis_length  # length of minor axis of lesion
+    if not props:
+        return False, gray  # fail-safe
+    minor_axis_length = props[0].minor_axis_length
 
-    # Define border band width (one third of minor axis, at least a minimum)
-    band_width = max(int(minor_axis_length / 3), 5)  # at least 5 px
+    # Compute border band
+    band_width = max(int(minor_axis_length / 3), 5)
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (band_width * 2 + 1, band_width * 2 + 1))
     inner_mask = cv2.erode(mask.astype(np.uint8), kernel)
-
-    # Border band: pixels in mask but not in inner_mask
     border_band = binary_mask - inner_mask
 
     roi = cv2.bitwise_and(gray, gray, mask=border_band)
+    roi_inverted = cv2.bitwise_not(roi)
 
-    # Invert ROI for vesselness (make dark streaks bright)
-    roi_inverted = cv2.bitwise_not(roi)  # invert grayscale: dark→light
-
-    # Apply Frangi filter to enhance line structures
+    # Enhance lines with Frangi filter
     line_prob = frangi(roi_inverted, sigmas=range(1, 6), beta=0.5, alpha=15)
-
-    # Remove line from border
     line_prob = line_prob * erosion(border_band, disk(5))
-
-    # 'line_prob' now contains high values where linear structures are likely
-    # (We might normalize or scale it to 0-255 for thresholding convenience)
     line_enhanced = np.uint8(np.clip(line_prob * 255, 0, 255))
 
-    # Binarize the enhanced line image
+    # Binarize & thin
     thresh_val = threshold_otsu(line_enhanced)
     binary_lines = (line_enhanced >= thresh_val).astype(np.uint8)
-
-    # Close small gaps in lines (3x3 square structuring element)
-    binary_lines = cv2.morphologyEx(binary_lines, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT,(3,3)))
-
-    # Thin the binary mask to get skeleton
+    binary_lines = cv2.morphologyEx(binary_lines, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)))
     skeleton = thin(binary_lines)
     skeleton = closing(skeleton, disk(2))
 
-    # Label connected components on the skeleton
+    # Analyze streaks
     labels = label(skeleton, connectivity=2)
     regions = regionprops(labels)
+    lesion_centroid = props[0].centroid
 
-    lesion_centroid = props[0].centroid  # from earlier regionprops(mask)
     radial_streaks = filter_radial_lines(regions, lesion_centroid, 45, 90)
     valid_streaks = get_valid_streaks(skeleton, radial_streaks, min_streak_area, min_branch_points)
 
+    # Overlay for visualization
     overlay = gray.copy()
-    
     for region in valid_streaks:
         for y, x in region.coords:
-            if 0 <= y < overlay.shape[0] and 0 <= x < overlay.shape[1]:
-                overlay[int(y), int(x)] = 255
+            overlay[int(y), int(x)] = 255
 
+    # DEBUG DISPLAY
     if show_graph:
-        fig, axes = plt.subplots(1, 5, figsize=(18, 4))
+        fig, axes = plt.subplots(1, 6, figsize=(20, 4))
         fig.suptitle("Streak Detection Pipeline", fontsize=16)
 
-        axes[0].imshow(gray); axes[0].set_title("Original"); axes[0].axis('off')
-        axes[1].imshow(roi_inverted, cmap='gray'); axes[1].set_title("Inverted ROI"); axes[1].axis('off')
-        axes[2].imshow(line_enhanced, cmap='gray'); axes[2].set_title("Enhanced Lines"); axes[2].axis('off')
-        axes[3].imshow(skeleton, cmap='gray'); axes[3].set_title("Skeleton"); axes[3].axis('off')
-        axes[4].imshow(overlay, cmap='gray'); axes[4].set_title("Detected Streaks"); axes[4].axis('off')
+        # ORIGINAL IN TRUE COLOR
+        axes[0].imshow(image)  # show image directly without conversion
+        axes[0].set_title("Original Image")
+        axes[0].axis('off')
+
+        axes[1].imshow(roi_inverted, cmap='gray')
+        axes[1].set_title("Inverted ROI")
+        axes[1].axis('off')
+
+        axes[2].imshow(line_enhanced, cmap='gray')
+        axes[2].set_title("Enhanced Lines")
+        axes[2].axis('off')
+
+        axes[3].imshow(skeleton, cmap='gray')
+        axes[3].set_title("Skeleton")
+        axes[3].axis('off')
+
+        axes[4].imshow(overlay, cmap='gray')
+        axes[4].set_title("Detected Streaks")
+        axes[4].axis('off')
+
+        axes[5].imshow(border_band, cmap='gray')
+        axes[5].set_title("Border Band Mask")
+        axes[5].axis('off')
 
         plt.tight_layout()
         plt.show()
 
     return len(valid_streaks) > 3, overlay
+
 
 MAX_SIDE = 256
 
@@ -549,7 +555,7 @@ def compute_dermoscopic_score(image: np.ndarray, mask: np.ndarray, save_vis_path
     has_dots, has_globules, vis_img = detect_dots_and_globules(gray, mask, image, save_vis_path=save_vis_path, show_graph=show_graph)
     has_structureless, vis_img = detect_structureless_areas(gray, mask, vis_img, save_vis_path=save_vis_path , show_graph=show_graph)
     has_pigment_network, vis_img = detect_pigment_networks(image, mask, save_vis_path=save_vis_path, show_graph=show_graph)
-    has_streaks, vis_img = detect_streaks(gray, mask, show_graph=show_graph)
+    has_streaks, vis_img = detect_streaks(image, gray, mask, show_graph=show_graph)
 
     # Final scoring (0.5 points per feature present)
     present_features = sum([
