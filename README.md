@@ -21,6 +21,7 @@ ABCDetect automates this analysis by first segmenting the lesion and then quanti
 
 ## Video/demo/GIF
 Video Link: https://drive.google.com/file/d/1KuKjS7i70OPOy5zqHXcjzu_l7hwtBvab/view
+![SPOILER_image](https://github.com/user-attachments/assets/a0cd7254-5813-4509-b7d6-4bac8a8f6685)
 
 
 ## Table of Contents
