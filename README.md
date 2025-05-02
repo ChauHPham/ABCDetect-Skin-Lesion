@@ -22,6 +22,18 @@ ABCDetect automates this analysis by first segmenting the lesion and then quanti
 ## Video/demo/GIF
 Video Link: https://drive.google.com/file/d/1KuKjS7i70OPOy5zqHXcjzu_l7hwtBvab/view
 ![SPOILER_image](https://github.com/user-attachments/assets/a0cd7254-5813-4509-b7d6-4bac8a8f6685)
+![dfbgwrgwe](https://github.com/user-attachments/assets/856839b9-8381-45b5-9a5b-91c4c154a3ff)
+![sbfhmt](https://github.com/user-attachments/assets/5e05ca5c-8411-4f86-95d4-199efa1183b4)
+![ytdmsrm](https://github.com/user-attachments/assets/9986efb6-53f6-4767-baa4-966b83712948)
+![htrjnrj4st](https://github.com/user-attachments/assets/a6695c7f-8fdd-4ad8-8b3f-c50ce2927846)
+![tyl,tukty](https://github.com/user-attachments/assets/0ec08bb8-731e-44e2-bdaf-ebdef024249c)
+![fmfgnmd](https://github.com/user-attachments/assets/c0a21ccc-0bf6-49f1-b40a-c86c2b3ccf60)
+![bvhfjngn](https://github.com/user-attachments/assets/204e1de3-ef44-4540-a03a-a4a0a1b048de)
+![mghfmxgfm](https://github.com/user-attachments/assets/14519241-404c-4841-8359-167df2b1ae7f)
+![ethnestb](https://github.com/user-attachments/assets/ae16362a-5dfd-4c11-bd50-9682a67e1829)
+![tmtdmty](https://github.com/user-attachments/assets/36eec9f9-ecee-463a-8995-0b947a82e199)
+![yrhtrherh](https://github.com/user-attachments/assets/0ffa34ad-ca8f-4a0d-8a5e-dbd954d65501)
+
 
 
 ## Table of Contents
